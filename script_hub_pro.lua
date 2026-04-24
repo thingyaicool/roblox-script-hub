@@ -2287,31 +2287,6 @@ function KeySystem.Show()
     KeyInput.Name = "KeyInput"
     KeyInput.TextSize = 16
     
-    local SubmitButton = UI.CreateButton(KeyPanel, {
-        Text = "SUBMIT",
-        Size = UDim2.new(0.4, 0, 0, 45),
-        Position = UDim2.new(0.3, 0, 0, 175),
-        BackgroundColor3 = Config.Theme.Success,
-        TextColor3 = Config.Theme.Dark,
-    })
-    
-    local AttemptsLabel = UI.CreateLabel(KeyPanel, {
-        Text = "Attempts: " .. (KeySystem.MaxAttempts - KeySystem.Attempts),
-        TextSize = 12,
-        TextColor3 = Config.Theme.Warning,
-        Position = UDim2.new(0, 20, 0, 240),
-        Size = UDim2.new(1, -40, 0, 25),
-    })
-    
-    local InfoLabel = UI.CreateLabel(KeyPanel, {
-        Text = "Key: 123",
-        TextSize = 11,
-        TextColor3 = Config.Theme.Light,
-        Position = UDim2.new(0, 20, 0, 270),
-        Size = UDim2.new(1, -40, 0, 60),
-        TextWrapped = true,
-    })
-    
     local function CheckKey()
         local InputText = KeyInput.Text
         if InputText == Config.CorrectKey then
@@ -2340,7 +2315,32 @@ function KeySystem.Show()
         end
     end
     
-    SubmitButton.MouseButton1Click:Connect(CheckKey)
+    local SubmitButton = UI.CreateButton(KeyPanel, {
+        Text = "SUBMIT",
+        Size = UDim2.new(0.4, 0, 0, 45),
+        Position = UDim2.new(0.3, 0, 0, 175),
+        BackgroundColor3 = Config.Theme.Success,
+        TextColor3 = Config.Theme.Dark,
+        Callback = CheckKey,
+    })
+    
+    local AttemptsLabel = UI.CreateLabel(KeyPanel, {
+        Text = "Attempts: " .. (KeySystem.MaxAttempts - KeySystem.Attempts),
+        TextSize = 12,
+        TextColor3 = Config.Theme.Warning,
+        Position = UDim2.new(0, 20, 0, 240),
+        Size = UDim2.new(1, -40, 0, 25),
+    })
+    
+    local InfoLabel = UI.CreateLabel(KeyPanel, {
+        Text = "Key: 123",
+        TextSize = 11,
+        TextColor3 = Config.Theme.Light,
+        Position = UDim2.new(0, 20, 0, 270),
+        Size = UDim2.new(1, -40, 0, 60),
+        TextWrapped = true,
+    })
+    
     KeyInput.FocusLost:Connect(function(EnterPressed)
         if EnterPressed then
             CheckKey()
