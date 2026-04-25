@@ -216,22 +216,33 @@ end
 
 function UI.CreateButton(Parent, Properties)
     Properties = Properties or {}
-    local Button = UI.CreateFrame(Parent, {
+    local Button = UI.Create("TextButton", {
+        Parent = Parent,
         Size = Properties.Size or UDim2.new(0, 120, 0, 40),
         Position = Properties.Position,
         BackgroundColor3 = Properties.BackgroundColor3 or Config.Theme.Primary,
-        UseStroke = true,
-        Padding = 0,
+        BorderSizePixel = 0,
+        Text = Properties.Text or "Button",
+        TextColor3 = Properties.TextColor3 or Config.Theme.Dark,
+        TextSize = Properties.TextSize or 13,
+        Font = Properties.Font or Enum.Font.GothamMedium,
+        AutoButtonColor = false,
     })
     Button.Name = Properties.Name or "Button"
     
-    local ButtonText = UI.CreateLabel(Button, {
-        Text = Properties.Text or "Button",
-        TextSize = Properties.TextSize or 13,
-        TextColor3 = Properties.TextColor3 or Config.Theme.Dark,
+    UI.Create("UICorner", {
+        Parent = Button,
+        CornerRadius = Properties.CornerRadius or Config.CornerRadius,
     })
-    ButtonText.Size = UDim2.new(1, 0, 1, 0)
-    ButtonText.Position = UDim2.new(0, 0, 0, 0)
+    
+    if Properties.UseStroke then
+        UI.Create("UIStroke", {
+            Parent = Button,
+            Color = Properties.StrokeColor or Config.Theme.Accent,
+            Thickness = Properties.StrokeThickness or 1.5,
+            Transparency = Properties.StrokeTransparency or 0.6,
+        })
+    end
     
     local OriginalColor = Properties.BackgroundColor3 or Config.Theme.Primary
     local HoverColor = Properties.HoverColor or Config.Theme.Accent
