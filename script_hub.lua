@@ -1,5 +1,6 @@
 -- ============================================================================
--- ROBLOX SCRIPT HUB - Production Quality Implementation
+-- ROBLOX SCRIPT HUB - Rebuilt Client Architecture
+-- Full UI + Key System Overhaul
 -- Compatible with Delta Executor on Chromebook
 -- ============================================================================
 
@@ -13,28 +14,143 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 -- ============================================================================
--- CONFIGURATION
+-- CORE + CONFIG
 -- ============================================================================
 
 local Config = {
     CorrectKey = "123",
+    Version = "1.0",
     Theme = {
-        Primary = Color3.fromRGB(138, 43, 226),      -- Purple
-        Secondary = Color3.fromRGB(75, 0, 130),      -- Indigo
-        Accent = Color3.fromRGB(0, 191, 255),        -- DeepSkyBlue
-        Dark = Color3.fromRGB(20, 20, 20),           -- Nearly Black
-        Light = Color3.fromRGB(240, 240, 240),       -- Nearly White
-        Success = Color3.fromRGB(50, 205, 50),       -- LimeGreen
-        Danger = Color3.fromRGB(220, 20, 60),        -- Crimson
-        Warning = Color3.fromRGB(255, 165, 0),       -- Orange
+        Primary = Color3.fromRGB(40, 40, 70),
+        Secondary = Color3.fromRGB(20, 20, 30),
+        Accent = Color3.fromRGB(45, 189, 255),
+        Success = Color3.fromRGB(50, 205, 50),
+        Danger = Color3.fromRGB(220, 20, 60),
+        Warning = Color3.fromRGB(255, 165, 0),
+        Light = Color3.fromRGB(235, 235, 245),
+        Dark = Color3.fromRGB(10, 10, 15),
     },
-    Padding = 10,
-    CornerRadius = UDim.new(0, 8),
-    TransitionSpeed = 0.3,
+    CornerRadius = UDim.new(0, 12),
+    TransitionSpeed = 0.22,
+    NotificationDuration = 2,
+    UiScaleMin = 0.8,
+    UiScaleMax = 1.2,
+    MaxVisibleScriptCards = 10,
 }
 
+local Core = {
+    State = {
+        ActiveCategory = "player / stats",
+        LastCategory = nil,
+        KeyAttempts = 0,
+        MaxKeyAttempts = 3,
+        ModalOpen = false,
+        UiScale = 1,
+        HasHydrated = false,
+        SearchText = "",
+    },
+    Modules = {},
+    Connections = {},
+    TaskQueue = {},
+    Services = {
+        Players = Players,
+        UIS = UserInputService,
+        Run = RunService,
+        Http = HttpService,
+        Tween = TweenService,
+        LocalPlayer = LocalPlayer,
+        PlayerGui = PlayerGui,
+    },
+}
+
+function Core:BindConnection(Connection)
+    if Connection and typeof(Connection.Disconnect) == "function" then
+        table.insert(self.Connections, Connection)
+    end
+    return Connection
+end
+
+function Core:DisconnectAll()
+    for _, Connection in ipairs(self.Connections) do
+        pcall(function()
+            Connection:Disconnect()
+        end)
+    end
+    self.Connections = {}
+end
+
+function Core:SafeExecute(Func)
+    local Success, Err = pcall(Func)
+    if not Success then
+        warn("ScriptHub SafeExecute error:", Err)
+        self.Modules.UI.Notify("System error: " .. tostring(Err), 3, "Danger")
+    end
+    return Success, Err
+end
+
+function Core:Debounce(Key, Delay)
+    Delay = Delay or 0.25
+    if not self.State.Debounce then
+        self.State.Debounce = {}
+    end
+    if self.State.Debounce[Key] then
+        return false
+    end
+    self.State.Debounce[Key] = true
+    task.delay(Delay, function()
+        self.State.Debounce[Key] = nil
+    end)
+    return true
+end
+
+function Core:Throttle(Key, Delay)
+    Delay = Delay or 0.15
+    if not self.State.Throttle then
+        self.State.Throttle = {}
+    end
+    if self.State.Throttle[Key] then
+        return false
+    end
+    self.State.Throttle[Key] = true
+    task.delay(Delay, function()
+        self.State.Throttle[Key] = nil
+    end)
+    return true
+end
+
+function Core:SetProp(Object, Property, Value)
+    if Object and Object[Property] ~= nil then
+        Object[Property] = Value
+        return true
+    end
+    return false
+end
+
+function Core:Schedule(TaskName, Func, Delay)
+    Delay = Delay or 0
+    table.insert(self.TaskQueue, {Name = TaskName or "task", Func = Func, Delay = Delay})
+end
+
+function Core:FlushTasks()
+    while #self.TaskQueue > 0 do
+        local Entry = table.remove(self.TaskQueue, 1)
+        task.delay(Entry.Delay, Entry.Func)
+    end
+end
+
+function Core:CreateTaskRunner()
+    self.Services.Run:BindToRenderStep("ScriptHubTaskRunner", Enum.RenderPriority.Last.Value, function()
+        if #self.TaskQueue > 0 then
+            local Entry = table.remove(self.TaskQueue, 1)
+            if Entry and typeof(Entry.Func) == "function" then
+                self:SafeExecute(Entry.Func)
+            end
+        end
+    end)
+end
+
 -- ============================================================================
--- UTILITY FUNCTIONS
+-- UTILITIES
 -- ============================================================================
 
 local UI = {}
@@ -47,562 +163,427 @@ function UI.Create(ClassName, Properties)
     return Instance
 end
 
+function UI.Apply(Instance, Properties)
+    for Property, Value in pairs(Properties or {}) do
+        Instance[Property] = Value
+    end
+    return Instance
+end
+
+function UI.SafeDestroy(Object)
+    if Object and Object.Parent then
+        pcall(function() Object:Destroy() end)
+    end
+end
+
 function UI.CreateFrame(Parent, Properties)
-    Properties = Properties or {}
     local Frame = UI.Create("Frame", {
         Parent = Parent,
-        BackgroundColor3 = Properties.BackgroundColor3 or Config.Theme.Dark,
-        BackgroundTransparency = Properties.BackgroundTransparency or 0.1,
+        BackgroundColor3 = Properties.BackgroundColor3 or Config.Theme.Primary,
+        BackgroundTransparency = Properties.BackgroundTransparency or 0.05,
         BorderSizePixel = 0,
         Size = Properties.Size or UDim2.new(1, 0, 1, 0),
         Position = Properties.Position or UDim2.new(0, 0, 0, 0),
+        ZIndex = Properties.ZIndex or 1,
+        Visible = Properties.Visible == false and false or true,
     })
-    
+
     if Properties.CornerRadius ~= false then
         UI.Create("UICorner", {
             Parent = Frame,
             CornerRadius = Properties.CornerRadius or Config.CornerRadius,
         })
     end
-    
+
     if Properties.UseStroke then
         UI.Create("UIStroke", {
             Parent = Frame,
-            Color = Config.Theme.Accent,
-            Thickness = 1.5,
-            Transparency = 0.7,
+            Color = Properties.StrokeColor or Config.Theme.Accent,
+            Thickness = Properties.StrokeThickness or 1.5,
+            Transparency = Properties.StrokeTransparency or 0.75,
         })
     end
-    
+
     return Frame
 end
 
 function UI.CreateLabel(Parent, Properties)
-    Properties = Properties or {}
-    local Label = UI.Create("TextLabel", {
+    return UI.Create("TextLabel", {
         Parent = Parent,
         BackgroundTransparency = 1,
         TextColor3 = Properties.TextColor3 or Config.Theme.Light,
         TextSize = Properties.TextSize or 14,
-        Font = Enum.Font.GothamMedium,
+        Font = Properties.Font or Enum.Font.GothamMedium,
         Text = Properties.Text or "",
-        Size = Properties.Size or UDim2.new(1, 0, 0, 30),
+        Size = Properties.Size or UDim2.new(1, 0, 0, 20),
         Position = Properties.Position or UDim2.new(0, 0, 0, 0),
         TextXAlignment = Properties.TextXAlignment or Enum.TextXAlignment.Left,
         TextYAlignment = Properties.TextYAlignment or Enum.TextYAlignment.Center,
+        ZIndex = Properties.ZIndex or 1,
     })
-    return Label
 end
 
 function UI.CreateButton(Parent, Properties)
-    Properties = Properties or {}
     local Button = UI.Create("TextButton", {
         Parent = Parent,
         Size = Properties.Size or UDim2.new(0, 120, 0, 40),
-        Position = Properties.Position,
-        BackgroundColor3 = Properties.BackgroundColor3 or Config.Theme.Primary,
+        Position = Properties.Position or UDim2.new(0, 0, 0, 0),
+        BackgroundColor3 = Properties.BackgroundColor3 or Config.Theme.Accent,
         BorderSizePixel = 0,
         Text = Properties.Text or "Button",
         TextColor3 = Properties.TextColor3 or Config.Theme.Dark,
-        TextSize = Properties.TextSize or 13,
-        Font = Properties.Font or Enum.Font.GothamMedium,
+        TextSize = Properties.TextSize or 14,
+        Font = Properties.Font or Enum.Font.GothamBold,
         AutoButtonColor = false,
+        ZIndex = Properties.ZIndex or 2,
     })
-    
+
     UI.Create("UICorner", {
         Parent = Button,
         CornerRadius = Properties.CornerRadius or Config.CornerRadius,
     })
-    
+
     if Properties.UseStroke then
         UI.Create("UIStroke", {
             Parent = Button,
-            Color = Properties.StrokeColor or Config.Theme.Accent,
+            Color = Properties.StrokeColor or Config.Theme.Light,
             Thickness = Properties.StrokeThickness or 1.5,
-            Transparency = Properties.StrokeTransparency or 0.6,
+            Transparency = Properties.StrokeTransparency or 0.7,
         })
     end
-    
-    local OriginalColor = Properties.BackgroundColor3 or Config.Theme.Primary
-    local HoverColor = Properties.HoverColor or Config.Theme.Accent
-    
-    local function OnHover()
-        local Tween = TweenService:Create(Button, TweenInfo.new(Config.TransitionSpeed), {BackgroundColor3 = HoverColor})
-        Tween:Play()
+
+    local Original = Button.BackgroundColor3
+    local Hover = Properties.HoverColor or Config.Theme.Success
+
+    local onEnter = function()
+        Core.Services.Tween:Create(Button, TweenInfo.new(Config.TransitionSpeed), {BackgroundColor3 = Hover}):Play()
     end
-    
-    local function OnLeave()
-        local Tween = TweenService:Create(Button, TweenInfo.new(Config.TransitionSpeed), {BackgroundColor3 = OriginalColor})
-        Tween:Play()
+    local onLeave = function()
+        Core.Services.Tween:Create(Button, TweenInfo.new(Config.TransitionSpeed), {BackgroundColor3 = Original}):Play()
     end
-    
-    Button.MouseEnter:Connect(OnHover)
-    Button.MouseLeave:Connect(OnLeave)
-    
+
+    Button.MouseEnter:Connect(onEnter)
+    Button.MouseLeave:Connect(onLeave)
+
     if Properties.Callback then
-        Button.MouseButton1Click:Connect(Properties.Callback)
-    end
-    
-    Button.Name = Properties.Name or "Button"
-    return Button
-end
-
-function UI.CreateTextBox(Parent, Properties)
-    Properties = Properties or {}
-    local TextBox = UI.Create("TextBox", {
-        Parent = Parent,
-        BackgroundColor3 = Config.Theme.Secondary,
-        BackgroundTransparency = 0.2,
-        BorderSizePixel = 0,
-        TextColor3 = Config.Theme.Light,
-        TextSize = 16,
-        Font = Enum.Font.GothamMedium,
-        PlaceholderText = Properties.PlaceholderText or "Enter text...",
-        PlaceholderColor3 = Config.Theme.Light,
-        Size = Properties.Size or UDim2.new(1, -20, 0, 40),
-        Position = Properties.Position or UDim2.new(0, 10, 0, 0),
-        Text = "",
-    })
-    
-    UI.Create("UICorner", {
-        Parent = TextBox,
-        CornerRadius = Config.CornerRadius,
-    })
-    
-    UI.Create("UIStroke", {
-        Parent = TextBox,
-        Color = Config.Theme.Accent,
-        Thickness = 1.5,
-        Transparency = 0.7,
-    })
-    
-    return TextBox
-end
-
-function UI.Notify(Message, Duration)
-    Duration = Duration or 2
-    local Notification = UI.CreateFrame(PlayerGui, {
-        Size = UDim2.new(0, 300, 0, 60),
-        Position = UDim2.new(1, -330, 0, 20),
-        BackgroundColor3 = Config.Theme.Primary,
-        UseStroke = true,
-    })
-    
-    UI.CreateLabel(Notification, {
-        Text = Message,
-        TextSize = 14,
-        Size = UDim2.new(1, 0, 1, 0),
-    })
-    
-    local TweenIn = TweenService:Create(Notification, TweenInfo.new(0.3), {Position = UDim2.new(1, -330, 0, 20)})
-    TweenIn:Play()
-    
-    task.wait(Duration)
-    
-    local TweenOut = TweenService:Create(Notification, TweenInfo.new(0.3), {Position = UDim2.new(1, 0, 0, 20)})
-    TweenOut:Play()
-    TweenOut.Completed:Connect(function()
-        Notification:Destroy()
-    end)
-end
-
--- ============================================================================
--- KEY SYSTEM
--- ============================================================================
-
-local KeySystem = {}
-KeySystem.Attempts = 0
-KeySystem.MaxAttempts = 3
-
-function KeySystem.Show()
-    KeySystem.Attempts = 0
-
-    local ScreenGui = UI.Create("ScreenGui", {
-        Parent = PlayerGui,
-        ResetOnSpawn = false,
-        Name = "KeySystemGui",
-    })
-
-    local Overlay = UI.CreateFrame(ScreenGui, {
-        Size = UDim2.new(1, 0, 1, 0),
-        BackgroundColor3 = Color3.new(0, 0, 0),
-        BackgroundTransparency = 0.7,
-        CornerRadius = false,
-    })
-
-    local KeyPanel = UI.CreateFrame(Overlay, {
-        Size = UDim2.new(0, 380, 0, 300),
-        Position = UDim2.new(0.5, -190, 0.5, -150),
-        BackgroundColor3 = Config.Theme.Dark,
-        UseStroke = true,
-    })
-
-    local Header = UI.CreateFrame(KeyPanel, {
-        Size = UDim2.new(1, 0, 0, 60),
-        Position = UDim2.new(0, 0, 0, 0),
-        BackgroundColor3 = Color3.fromRGB(35, 35, 35),
-        UseStroke = false,
-        CornerRadius = false,
-    })
-
-    local Title = UI.CreateLabel(Header, {
-        Text = "🔐 KEY SYSTEM",
-        TextSize = 19,
-        Size = UDim2.new(1, -20, 1, 0),
-        Position = UDim2.new(0, 10, 0, 0),
-        TextColor3 = Config.Theme.Accent,
-        TextXAlignment = Enum.TextXAlignment.Left,
-    })
-
-    local Description = UI.CreateLabel(KeyPanel, {
-        Text = "Enter the correct key and press SUBMIT or Enter.",
-        TextSize = 13,
-        Position = UDim2.new(0, 10, 0, 75),
-        Size = UDim2.new(1, -20, 0, 35),
-        TextColor3 = Config.Theme.Light,
-        TextXAlignment = Enum.TextXAlignment.Left,
-    })
-
-    local KeyInput = UI.CreateTextBox(KeyPanel, {
-        Size = UDim2.new(1, -20, 0, 45),
-        Position = UDim2.new(0, 10, 0, 120),
-        PlaceholderText = "Enter key...",
-    })
-    KeyInput.Name = "KeyInput"
-    KeyInput.TextXAlignment = Enum.TextXAlignment.Left
-    KeyInput.ClearTextOnFocus = false
-
-    local SubmitButton = UI.CreateButton(KeyPanel, {
-        Text = "UNLOCK",
-        Size = UDim2.new(0, 170, 0, 45),
-        Position = UDim2.new(0.5, -85, 0, 180),
-        BackgroundColor3 = Config.Theme.Success,
-        TextColor3 = Config.Theme.Dark,
-        TextSize = 14,
-    })
-
-    local AttemptsLabel = UI.CreateLabel(KeyPanel, {
-        Text = "Attempts left: " .. (KeySystem.MaxAttempts - KeySystem.Attempts),
-        TextSize = 12,
-        Position = UDim2.new(0, 10, 0, 240),
-        Size = UDim2.new(1, -20, 0, 30),
-        TextColor3 = Config.Theme.Warning,
-        TextXAlignment = Enum.TextXAlignment.Left,
-    })
-
-    local function UpdateAttemptsLabel()
-        AttemptsLabel.Text = "Attempts left: " .. math.max(0, KeySystem.MaxAttempts - KeySystem.Attempts)
-    end
-
-    local function FlashPanel(Color)
-        local OriginalColor = KeyPanel.BackgroundColor3
-        KeyPanel.BackgroundColor3 = Color
-        task.delay(0.15, function()
-            if KeyPanel and KeyPanel.Parent then
-                KeyPanel.BackgroundColor3 = OriginalColor
+        Button.MouseButton1Click:Connect(function()
+            if Core:Debounce("button_" .. tostring(Button), 0.18) then
+                Core:SafeExecute(Properties.Callback)
             end
         end)
     end
 
-    local function CheckKey()
-        local InputText = tostring(KeyInput.Text or ""):gsub("^%s*(.-)%s*$", "%1")
-        if InputText == "" then
-            UI.Notify("Please enter the key first", 1.5)
-            return
-        end
+    return Button
+end
 
-        if InputText == Config.CorrectKey then
-            UI.Notify("Key valid. Opening hub...", 2)
-            ScreenGui:Destroy()
-            task.wait(0.3)
-            ScriptHub.Show()
-            return
-        end
+function UI.CreateTextBox(Parent, Properties)
+    local TextBox = UI.Create("TextBox", {
+        Parent = Parent,
+        BackgroundColor3 = Properties.BackgroundColor3 or Config.Theme.Primary,
+        BackgroundTransparency = Properties.BackgroundTransparency or 0,
+        BorderSizePixel = 0,
+        TextColor3 = Properties.TextColor3 or Config.Theme.Light,
+        TextSize = Properties.TextSize or 14,
+        Font = Properties.Font or Enum.Font.GothamMedium,
+        PlaceholderText = Properties.PlaceholderText or "Enter text...",
+        PlaceholderColor3 = Properties.PlaceholderColor3 or Config.Theme.Light,
+        Size = Properties.Size or UDim2.new(1, -20, 0, 36),
+        Position = Properties.Position or UDim2.new(0, 0, 0, 0),
+        Text = Properties.Text or "",
+        TextXAlignment = Properties.TextXAlignment or Enum.TextXAlignment.Left,
+        ZIndex = Properties.ZIndex or 2,
+        ClearTextOnFocus = Properties.ClearTextOnFocus ~= false,
+        TextWrapped = true,
+    })
 
-        KeySystem.Attempts = KeySystem.Attempts + 1
-        FlashPanel(Config.Theme.Danger)
-        KeyInput.Text = ""
-        UpdateAttemptsLabel()
+    UI.Create("UICorner", {
+        Parent = TextBox,
+        CornerRadius = Properties.CornerRadius or Config.CornerRadius,
+    })
 
-        if KeySystem.Attempts >= KeySystem.MaxAttempts then
-            task.wait(0.2)
-            UI.Notify("Maximum attempts exceeded. Kicking...", 2)
-            task.wait(2)
-            LocalPlayer:Kick("Key system failed")
-        else
-            UI.Notify("Invalid key. Try again.", 1.5)
-        end
-    end
+    UI.Create("UIStroke", {
+        Parent = TextBox,
+        Color = Properties.StrokeColor or Config.Theme.Accent,
+        Thickness = 1,
+        Transparency = 0.7,
+    })
 
-    SubmitButton.MouseButton1Click:Connect(CheckKey)
-    KeyInput.FocusLost:Connect(function(EnterPressed)
-        if EnterPressed then
-            CheckKey()
-        end
+    return TextBox
+end
+
+function UI.CreateOverlay(Parent, ZIndex)
+    return UI.CreateFrame(Parent, {
+        Size = UDim2.new(1, 0, 1, 0),
+        Position = UDim2.new(0, 0, 0, 0),
+        BackgroundColor3 = Color3.new(0, 0, 0),
+        BackgroundTransparency = 0.6,
+        CornerRadius = false,
+        ZIndex = ZIndex or 20,
+    })
+end
+
+function UI.CreateSkeletonRow(Parent, Index)
+    local Skeleton = UI.CreateFrame(Parent, {
+        Size = UDim2.new(1, -20, 0, 70),
+        Position = UDim2.new(0, 10, 0, (Index - 1) * 80),
+        BackgroundColor3 = Color3.fromRGB(30, 30, 45),
+        CornerRadius = Config.CornerRadius,
+        ZIndex = 1,
+    })
+
+    UI.CreateFrame(Skeleton, {
+        Size = UDim2.new(1, -20, 0, 16),
+        Position = UDim2.new(0, 10, 0, 12),
+        BackgroundColor3 = Color3.fromRGB(55, 55, 90),
+        CornerRadius = Config.CornerRadius,
+    })
+
+    UI.CreateFrame(Skeleton, {
+        Size = UDim2.new(0.5, -10, 0, 16),
+        Position = UDim2.new(0, 10, 0, 38),
+        BackgroundColor3 = Color3.fromRGB(55, 55, 90),
+        CornerRadius = Config.CornerRadius,
+    })
+
+    return Skeleton
+end
+
+function UI.Notify(Message, Duration, Style)
+    Duration = Duration or Config.NotificationDuration
+    local Notification = UI.CreateFrame(PlayerGui, {
+        Size = UDim2.new(0, 320, 0, 50),
+        Position = UDim2.new(1, 20, 0, 20),
+        BackgroundColor3 = Style == "Danger" and Config.Theme.Danger or Style == "Success" and Config.Theme.Success or Config.Theme.Secondary,
+        ZIndex = 50,
+    })
+
+    UI.CreateLabel(Notification, {
+        Text = Message,
+        TextSize = 14,
+        TextColor3 = Config.Theme.Dark,
+        Position = UDim2.new(0, 12, 0, 0),
+        Size = UDim2.new(1, -24, 1, 0),
+        TextXAlignment = Enum.TextXAlignment.Left,
+    })
+
+    local TweenIn = TweenService:Create(Notification, TweenInfo.new(0.25), {Position = UDim2.new(1, -340, 0, 20)})
+    TweenIn:Play()
+
+    task.delay(Duration, function()
+        local TweenOut = TweenService:Create(Notification, TweenInfo.new(0.25), {Position = UDim2.new(1, 20, 0, 20)})
+        TweenOut:Play()
+        TweenOut.Completed:Connect(function()
+            UI.SafeDestroy(Notification)
+        end)
     end)
-
-    KeyInput:CaptureFocus()
 end
 
 -- ============================================================================
--- SCRIPT HUB DATA
+-- DATA
 -- ============================================================================
 
 local ScriptLibrary = {
     {Name = "Infinite Jump", Category = "player / stats", Code = [[
-local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
-local JumpHeight = 50
-
-local CanJump = false
-UserInputService.InputBegan:Connect(function(Input, GameProcessed)
-    if not GameProcessed and Input.KeyCode == Enum.KeyCode.Space then
-        CanJump = true
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(Input)
-    if Input.KeyCode == Enum.KeyCode.Space then
-        CanJump = false
-    end
-end)
-
-Humanoid.StateChanged:Connect(function(OldState, NewState)
-    if CanJump then
-        Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-    end
-end)
+Humanoid.JumpPower = 200
+Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 ]]},
-    {Name = "WalkSpeed+", Category = "player / stats", Code = "LocalPlayer.Character.Humanoid.WalkSpeed = 50"},
-    {Name = "Fling Script", Category = "players", Code = [[
-local Target = game.Players:FindFirstChild("TargetName")
-if Target and Target.Character then
-    local TargetChar = Target.Character
-    local RootPart = TargetChar:FindFirstChild("HumanoidRootPart")
-    if RootPart then
-        RootPart.Velocity = Vector3.new(math.random(-100, 100), 100, math.random(-100, 100))
-    end
+    {Name = "Speed Boost", Category = "player / stats", Code = [[
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+    LocalPlayer.Character.Humanoid.WalkSpeed = 90
 end
 ]]},
-    {Name = "Teleport All Players", Category = "players", Code = [[
-local SpawnLocation = game.Workspace:FindFirstChild("Spawn")
-if SpawnLocation then
-    for _, Player in pairs(game.Players:GetPlayers()) do
-        if Player.Character then
-            Player.Character:MoveTo(SpawnLocation.Position)
-        end
-    end
+    {Name = "God Mode", Category = "player / stats", Code = [[
+local p = game.Players.LocalPlayer
+if p.Character and p.Character:FindFirstChild("Humanoid") then
+    p.Character.Humanoid.MaxHealth = 1e6
+    p.Character.Humanoid.Health = 1e6
 end
 ]]},
-    {Name = "Lag Everyone", Category = "troll", Code = [[
-while true do
-    local Part = Instance.new("Part")
-    Part.Parent = game.Workspace
-    Part.CanCollide = false
-    task.wait(0.01)
+    {Name = "Teleport All", Category = "players", Code = [[
+for _, p in ipairs(game.Players:GetPlayers()) do
+    if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+        p.Character.HumanoidRootPart.CFrame = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
+    end
 end
 ]]},
     {Name = "Chat Spam", Category = "troll", Code = [[
 local Chat = game:GetService("Chat")
-for i = 1, 50 do
-    Chat:Chat(LocalPlayer.Character.Head, "SPAM DATA GO BRRRR", Enum.ChatColor.Red)
+for i = 1, 20 do
+    Chat:Chat(game.Players.LocalPlayer.Character.Head, "SPAM", Enum.ChatColor.Red)
     task.wait(0.1)
 end
 ]]},
-    {Name = "Desync Walk", Category = "exploits (dangerous)", Code = [[
-local Character = LocalPlayer.Character
-local RootPart = Character:FindFirstChild("HumanoidRootPart")
-for i = 1, 100 do
-    RootPart.CFrame = RootPart.CFrame * CFrame.new(10, 0, 0)
-    task.wait(0.01)
-end
-]]},
-    {Name = "Speed Exploit", Category = "exploits (dangerous)", Code = [[
-local Humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
-if Humanoid then
-    Humanoid.WalkSpeed = 999
+    {Name = "Rainbow Player", Category = "cosmetics", Code = [[
+for _, part in ipairs(game.Players.LocalPlayer.Character:GetDescendants()) do
+    if part:IsA("BasePart") then
+        part.Color = Color3.fromHSV(tick() % 1, 1, 1)
+    end
 end
 ]]},
 }
 
 -- ============================================================================
--- CUSTOM CATEGORIES (New Features)
--- ============================================================================
-
--- Category 1: Animation Controls
-table.insert(ScriptLibrary, {Name = "Emote Dance", Category = "animations", Code = [[
-local AnimationId = "rbxassetid://507766666"
-local Animation = Instance.new("Animation")
-Animation.AnimationId = AnimationId
-local LoadedAnim = LocalPlayer.Character.Humanoid:LoadAnimation(Animation)
-LoadedAnim:Play()
-]]})
-
-table.insert(ScriptLibrary, {Name = "Sit Animation", Category = "animations", Code = [[
-LocalPlayer.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
-LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Seated)
-]]})
-
--- Category 2: Cosmetics & Appearance
-table.insert(ScriptLibrary, {Name = "Character Transparency", Category = "cosmetics", Code = [[
-for _, Part in pairs(LocalPlayer.Character:GetDescendants()) do
-    if Part:IsA("BasePart") then
-        Part.Transparency = 0.5
-    end
-end
-]]})
-
-table.insert(ScriptLibrary, {Name = "Rainbow Character", Category = "cosmetics", Code = [[
-while true do
-    for _, Part in pairs(LocalPlayer.Character:GetDescendants()) do
-        if Part:IsA("BasePart") then
-            Part.Color = Color3.fromHSV(math.random() % 1, 1, 1)
-        end
-    end
-    task.wait(0.1)
-end
-]]})
-
--- Category 3: World Interaction
-table.insert(ScriptLibrary, {Name = "Delete All Parts", Category = "world", Code = [[
-for _, Part in pairs(game.Workspace:GetChildren()) do
-    if Part:IsA("BasePart") and Part.Name ~= "Baseplate" then
-        Part:Destroy()
-    end
-end
-]]})
-
-table.insert(ScriptLibrary, {Name = "Make Everything Unanchored", Category = "world", Code = [[
-for _, Part in pairs(game.Workspace:GetChildren()) do
-    if Part:IsA("BasePart") then
-        Part.CanCollide = false
-        Part.Anchored = false
-    end
-end
-]]})
-
--- ============================================================================
--- SCRIPT HUB UI
+-- SCRIPT HUB MODULE
 -- ============================================================================
 
 local ScriptHub = {}
-ScriptHub.CurrentCategory = "player / stats"
-ScriptHub.FavoriteScripts = {}
 
-function ScriptHub.GetScriptsByCategory(Category)
-    local Scripts = {}
-    for _, Script in pairs(ScriptLibrary) do
-        if Script.Category == Category then
-            table.insert(Scripts, Script)
-        end
-    end
-    return Scripts
-end
-
-function ScriptHub.GetCategories()
+function ScriptHub:GetCategories()
     local Categories = {}
     local Seen = {}
-    for _, Script in pairs(ScriptLibrary) do
-        if not Seen[Script.Category] then
-            table.insert(Categories, Script.Category)
-            Seen[Script.Category] = true
+    for _, Item in ipairs(ScriptLibrary) do
+        if not Seen[Item.Category] then
+            table.insert(Categories, Item.Category)
+            Seen[Item.Category] = true
         end
     end
     table.sort(Categories)
     return Categories
 end
 
-function ScriptHub.ExecuteScript(ScriptCode)
-    local Success, Error = pcall(function()
-        loadstring(ScriptCode)()
-    end)
-    
-    if Success then
-        UI.Notify("Script executed!", 2)
-    else
-        UI.Notify("Error: " .. tostring(Error), 3)
+function ScriptHub:GetScriptsByCategory(Category)
+    local Results = {}
+    for _, Item in ipairs(ScriptLibrary) do
+        if Item.Category == Category then
+            if Core.State.SearchText == "" or Item.Name:lower():find(Core.State.SearchText:lower()) then
+                table.insert(Results, Item)
+            end
+        end
     end
+    return Results
 end
 
-function ScriptHub.Show()
-    local MainGui = UI.Create("ScreenGui", {
+function ScriptHub:ExecuteScript(ScriptData)
+    Core:SafeExecute(function()
+        if type(ScriptData.Code) == "string" then
+            local Loaded = loadstring(ScriptData.Code)
+            if Loaded then
+                Loaded()
+                UI.Notify("Executed " .. ScriptData.Name, 2, "Success")
+            else
+                UI.Notify("Failed to load script.", 2, "Danger")
+            end
+        end
+    end)
+end
+
+function ScriptHub:Destroy()
+    Core:DisconnectAll()
+    if self.MainGui and self.MainGui.Parent then
+        UI.SafeDestroy(self.MainGui)
+    end
+    self.MainGui = nil
+    self.State = nil
+end
+
+function ScriptHub:Open()
+    if self.MainGui then
+        self:Destroy()
+    end
+
+    local ScreenGui = UI.Create("ScreenGui", {
         Parent = PlayerGui,
         ResetOnSpawn = false,
         Name = "ScriptHubGui",
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     })
-    
-    -- Background
-    local Background = UI.CreateFrame(MainGui, {
-        Size = UDim2.new(1, 0, 1, 0),
+
+    self.MainGui = ScreenGui
+    self.State = {}
+
+    local Root = UI.CreateFrame(ScreenGui, {
+        Size = UDim2.new(0.96, 0, 0.92, 0),
+        Position = UDim2.new(0.02, 0, 0.04, 0),
         BackgroundColor3 = Config.Theme.Dark,
-        BackgroundTransparency = 0,
-        CornerRadius = false,
+        UseStroke = true,
+        ZIndex = 2,
     })
-    
-    -- Top Bar
-    local TopBar = UI.CreateFrame(Background, {
-        Size = UDim2.new(1, 0, 0, 50),
+
+    UI.Create("UIPadding", {
+        Parent = Root,
+        PaddingTop = UDim.new(0, 12),
+        PaddingBottom = UDim.new(0, 12),
+        PaddingLeft = UDim.new(0, 12),
+        PaddingRight = UDim.new(0, 12),
+    })
+
+    local Header = UI.CreateFrame(Root, {
+        Size = UDim2.new(1, 0, 0, 62),
         BackgroundColor3 = Config.Theme.Secondary,
-        CornerRadius = false,
+        UseStroke = true,
     })
-    
-    local HubTitle = UI.CreateLabel(TopBar, {
+
+    UI.CreateLabel(Header, {
         Text = "⚙️ ROBLOX SCRIPT HUB",
-        TextSize = 18,
+        TextSize = 20,
         TextColor3 = Config.Theme.Accent,
-        Position = UDim2.new(0, 20, 0, 0),
-        Size = UDim2.new(0.5, 0, 1, 0),
+        Position = UDim2.new(0, 14, 0, 12),
+        Size = UDim2.new(0.5, 0, 0, 40),
     })
-    
-    local FloatingText = UI.Create("TextLabel", {
-        Parent = TopBar,
-        BackgroundTransparency = 1,
-        TextColor3 = Config.Theme.Light,
-        TextSize = 12,
-        Font = Enum.Font.GothamMedium,
-        Text = GetExecutorName and GetExecutorName() or "Unknown Executor",
-        Size = UDim2.new(0.3, 0, 1, 0),
-        Position = UDim2.new(0.65, 0, 0, 0),
-        TextXAlignment = Enum.TextXAlignment.Right,
+
+    self.State.SearchBox = UI.CreateTextBox(Header, {
+        Size = UDim2.new(0.35, 0, 0, 38),
+        Position = UDim2.new(0.55, 0, 0, 12),
+        PlaceholderText = "Search scripts...",
+        Text = "",
+        ZIndex = 3,
     })
-    FloatingText.Position = UDim2.new(1, -200, 0, 0)
-    
-    -- Sidebar
-    local Sidebar = UI.CreateFrame(Background, {
-        Size = UDim2.new(0, 200, 1, -50),
-        Position = UDim2.new(0, 0, 0, 50),
-        BackgroundColor3 = Config.Theme.Secondary,
+
+    self.State.SearchBox.FocusLost:Connect(function(EnterPressed)
+        if EnterPressed then
+            Core.State.SearchText = self.State.SearchBox.Text
+            self:RenderSidebar()
+            self:RenderContent()
+        end
+    end)
+
+    self.State.SearchBox.Changed:Connect(function(Property)
+        if Property == "Text" then
+            Core.State.SearchText = self.State.SearchBox.Text
+        end
+    end)
+
+    local Body = UI.CreateFrame(Root, {
+        Size = UDim2.new(1, 0, 1, -82),
+        Position = UDim2.new(0, 0, 0, 72),
+        BackgroundColor3 = Config.Theme.Dark,
         CornerRadius = false,
     })
-    
-    local SidebarList = UI.Create("ScrollingFrame", {
+
+    local Sidebar = UI.CreateFrame(Body, {
+        Size = UDim2.new(0, 220, 1, 0),
+        BackgroundColor3 = Config.Theme.Secondary,
+        UseStroke = true,
+    })
+
+    local ContentArea = UI.CreateFrame(Body, {
+        Size = UDim2.new(1, -230, 1, 0),
+        Position = UDim2.new(0, 230, 0, 0),
+        BackgroundColor3 = Config.Theme.Dark,
+    })
+
+    local SidebarScroll = UI.Create("ScrollingFrame", {
         Parent = Sidebar,
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         Size = UDim2.new(1, 0, 1, 0),
         CanvasSize = UDim2.new(0, 0, 0, 0),
         ScrollBarThickness = 6,
-        ScrollBarImageColor3 = Config.Theme.Accent,
+        ZIndex = 2,
     })
-    
-    local UIListLayout = UI.Create("UIListLayout", {
-        Parent = SidebarList,
-        Padding = UDim.new(0, 5),
+
+    local SidebarLayout = UI.Create("UIListLayout", {
+        Parent = SidebarScroll,
+        Padding = UDim.new(0, 8),
     })
-    UIListLayout.FillDirection = Enum.FillDirection.Vertical
-    UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    
-    -- Main Content Area
-    local ContentArea = UI.CreateFrame(Background, {
-        Size = UDim2.new(1, -200, 1, -50),
-        Position = UDim2.new(0, 200, 0, 50),
-        BackgroundColor3 = Config.Theme.Dark,
-        CornerRadius = false,
-    })
-    
+    SidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
     local ContentScroll = UI.Create("ScrollingFrame", {
         Parent = ContentArea,
         BackgroundTransparency = 1,
@@ -610,287 +591,368 @@ function ScriptHub.Show()
         Size = UDim2.new(1, 0, 1, 0),
         CanvasSize = UDim2.new(0, 0, 0, 0),
         ScrollBarThickness = 6,
-        ScrollBarImageColor3 = Config.Theme.Accent,
+        ZIndex = 2,
     })
-    
+
     local ContentLayout = UI.Create("UIListLayout", {
         Parent = ContentScroll,
-        Padding = UDim.new(0, 10),
+        Padding = UDim.new(0, 12),
     })
-    ContentLayout.FillDirection = Enum.FillDirection.Vertical
     ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    
-    -- Function to populate sidebar
-    local function PopulateSidebar()
-        for _, Child in pairs(SidebarList:GetChildren()) do
-            if Child:IsA("Frame") then
-                Child:Destroy()
-            end
-        end
-        
-        for _, Category in pairs(ScriptHub.GetCategories()) do
-            local CategoryButton = UI.CreateFrame(SidebarList, {
-                Size = UDim2.new(1, -10, 0, 40),
-                Position = UDim2.new(0, 5, 0, 0),
-                BackgroundColor3 = ScriptHub.CurrentCategory == Category and Config.Theme.Accent or Config.Theme.Primary,
-            })
-            CategoryButton.Name = Category
-            
-            local CategoryLabel = UI.CreateLabel(CategoryButton, {
-                Text = Category,
-                TextSize = 12,
-                TextColor3 = Config.Theme.Dark,
-                Size = UDim2.new(1, 0, 1, 0),
-            })
-            
-            CategoryButton.MouseButton1Click:Connect(function()
-                ScriptHub.CurrentCategory = Category
-                PopulateSidebar()
-                PopulateContent()
-            end)
+
+    self.State.SidebarScroll = SidebarScroll
+    self.State.ContentScroll = ContentScroll
+    self.State.SidebarLayout = SidebarLayout
+    self.State.ContentLayout = ContentLayout
+
+    self.State.StatusLabel = UI.CreateLabel(Root, {
+        Text = "Ready",
+        TextSize = 12,
+        TextColor3 = Config.Theme.Light,
+        Position = UDim2.new(0, 14, 1, -30),
+        Size = UDim2.new(0.5, 0, 0, 20),
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 3,
+    })
+
+    self:RenderSidebar()
+    self:HydrateUI()
+end
+
+function ScriptHub:RenderSidebar()
+    local Categories = self:GetCategories()
+    local Layout = self.State.SidebarScroll
+
+    for _, Child in ipairs(Layout:GetChildren()) do
+        if Child:IsA("Frame") then
+            UI.SafeDestroy(Child)
         end
     end
-    
-    -- Function to populate content
-    local function PopulateContent()
-        for _, Child in pairs(ContentScroll:GetChildren()) do
-            if Child:IsA("Frame") then
-                Child:Destroy()
-            end
-        end
-        
-        if ScriptHub.CurrentCategory == "player / stats" then
-            -- Default Landing Page
-            ScriptHub.ShowStatsPage(ContentScroll)
-        else
-            -- Script listing
-            for _, Script in pairs(ScriptHub.GetScriptsByCategory(ScriptHub.CurrentCategory)) do
-                local ScriptFrame = UI.CreateFrame(ContentScroll, {
-                    Size = UDim2.new(1, -20, 0, 80),
-                    BackgroundColor3 = Config.Theme.Secondary,
-                    UseStroke = true,
-                })
-                
-                local ScriptName = UI.CreateLabel(ScriptFrame, {
-                    Text = Script.Name,
-                    TextSize = 14,
-                    Position = UDim2.new(0, 10, 0, 5),
-                    Size = UDim2.new(0.6, 0, 0, 25),
-                })
-                
-                local ExecuteBtn = UI.CreateButton(ContentScroll:FindFirstChild("Parent") or ContentScroll.Parent, {
-                    Text = "Execute",
-                    Size = UDim2.new(0, 80, 0, 30),
-                    Position = UDim2.new(0, 10, 0, 35),
-                    BackgroundColor3 = Config.Theme.Success,
-                    Callback = function()
-                        ScriptHub.ExecuteScript(Script.Code)
-                    end
-                })
-                ExecuteBtn.Parent = ScriptFrame
-                ExecuteBtn.Position = UDim2.new(0, 10, 0, 35)
-                
-                local CopyBtn = UI.CreateButton(ScriptFrame, {
-                    Text = "Copy",
-                    Size = UDim2.new(0, 80, 0, 30),
-                    Position = UDim2.new(0, 100, 0, 35),
-                    BackgroundColor3 = Config.Theme.Accent,
-                    Callback = function()
-                        setclipboard(Script.Code)
-                        UI.Notify("Script copied to clipboard!", 2)
-                    end
-                })
-                
-                local FavBtn = UI.CreateButton(ScriptFrame, {
-                    Text = ScriptHub.FavoriteScripts[Script.Name] and "❤️ Fav" or "🤍 Fav",
-                    Size = UDim2.new(0, 80, 0, 30),
-                    Position = UDim2.new(0, 190, 0, 35),
-                    BackgroundColor3 = ScriptHub.FavoriteScripts[Script.Name] and Config.Theme.Danger or Config.Theme.Primary,
-                    Callback = function()
-                        ScriptHub.FavoriteScripts[Script.Name] = not ScriptHub.FavoriteScripts[Script.Name]
-                        PopulateContent()
-                    end
-                })
-            end
+
+    for _, Category in ipairs(Categories) do
+        local CategoryFrame = UI.CreateFrame(Layout, {
+            Size = UDim2.new(1, -18, 0, 38),
+            BackgroundColor3 = Core.State.ActiveCategory == Category and Config.Theme.Accent or Config.Theme.Primary,
+            UseStroke = true,
+            ZIndex = 3,
+        })
+
+        local CategoryButton = UI.CreateButton(CategoryFrame, {
+            Text = "  " .. Category,
+            Size = UDim2.new(1, 0, 1, 0),
+            Position = UDim2.new(0, 0, 0, 0),
+            BackgroundColor3 = Color3.new(0, 0, 0),
+            TextColor3 = Config.Theme.Light,
+            HoverColor = Config.Theme.Success,
+            Callback = function()
+                if Core.State.ActiveCategory ~= Category then
+                    Core.State.ActiveCategory = Category
+                    self:RenderSidebar()
+                    self:HydrateUI()
+                end
+            end,
+        })
+        CategoryButton.BackgroundTransparency = 1
+        CategoryButton.TextXAlignment = Enum.TextXAlignment.Left
+    end
+
+    Layout.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 12)
+end
+
+function ScriptHub:HydrateUI()
+    self.State.StatusLabel.Text = "Loading content..."
+    self.State.ContentScroll.CanvasSize = UDim2.new(0, 0, 0, Config.MaxVisibleScriptCards * 80)
+
+    for i = 1, Config.MaxVisibleScriptCards do
+        UI.CreateSkeletonRow(self.State.ContentScroll, i)
+    end
+
+    Core:Schedule("hydrate_content", function()
+        self:RenderContentInternal()
+    end, 0.18)
+end
+
+function ScriptHub:RenderContentInternal()
+    local ContentScroll = self.State.ContentScroll
+    for _, Child in ipairs(ContentScroll:GetChildren()) do
+        if Child:IsA("Frame") then
+            UI.SafeDestroy(Child)
         end
     end
-    
-    -- Stats Page Implementation
-    function ScriptHub.ShowStatsPage(Parent)
-        local MainContainer = UI.CreateFrame(Parent, {
-            Size = UDim2.new(1, -20, 0, 400),
+
+    if Core.State.ActiveCategory == "player / stats" then
+        self:RenderStatsPage()
+        return
+    end
+
+    local Scripts = self:GetScriptsByCategory(Core.State.ActiveCategory)
+    if #Scripts == 0 then
+        local Empty = UI.CreateFrame(ContentScroll, {
+            Size = UDim2.new(1, -20, 0, 110),
             BackgroundColor3 = Config.Theme.Secondary,
             UseStroke = true,
         })
-        
-        -- Welcome Section
-        local WelcomeFrame = UI.CreateFrame(MainContainer, {
-            Size = UDim2.new(0.5, -10, 0, 120),
-            Position = UDim2.new(0, 10, 0, 10),
-            BackgroundColor3 = Config.Theme.Primary,
-        })
-        
-        UI.CreateLabel(WelcomeFrame, {
-            Text = "Welcome, " .. LocalPlayer.Name,
-            TextSize = 16,
-            TextColor3 = Config.Theme.Accent,
-            Position = UDim2.new(0, 10, 0, 10),
-            Size = UDim2.new(1, -20, 0, 30),
-        })
-        
-        -- Stats Section
-        local StatsFrame = UI.CreateFrame(MainContainer, {
-            Size = UDim2.new(0.5, -10, 0, 120),
-            Position = UDim2.new(0.5, 5, 0, 10),
-            BackgroundColor3 = Config.Theme.Primary,
-        })
-        
-        local Ping = game:GetService("Stats"):FindFirstChild("Network") and math.floor(game:GetService("Stats").Network.ServerReplicator:FindFirstChild("Data") and tonumber(game:GetService("Stats").Network.ServerReplicator.Data.value) or 0) or 0
-        
-        UI.CreateLabel(StatsFrame, {
-            Text = "📊 Stats",
+        UI.CreateLabel(Empty, {
+            Text = "No scripts found.",
             TextSize = 14,
-            TextColor3 = Config.Theme.Accent,
-            Position = UDim2.new(0, 10, 0, 10),
-            Size = UDim2.new(1, -20, 0, 25),
+            Position = UDim2.new(0, 14, 0, 14),
+            Size = UDim2.new(1, -28, 0, 22),
         })
-        
-        UI.CreateLabel(StatsFrame, {
-            Text = "Ping: " .. Ping .. "ms",
-            TextSize = 12,
-            Position = UDim2.new(0, 10, 0, 40),
-            Size = UDim2.new(1, -20, 0, 20),
-        })
-        
-        UI.CreateLabel(StatsFrame, {
-            Text = "Players: " .. #game.Players:GetPlayers(),
-            TextSize = 12,
-            Position = UDim2.new(0, 10, 0, 65),
-            Size = UDim2.new(1, -20, 0, 20),
-        })
-        
-        -- Executor Detection
-        local ExecutorFrame = UI.CreateFrame(MainContainer, {
-            Size = UDim2.new(1, -20, 0, 80),
-            Position = UDim2.new(0, 10, 0, 140),
-            BackgroundColor3 = Config.Theme.Primary,
-        })
-        
-        local ExecutorName = "Unknown Executor"
-        if GetExecutorName then ExecutorName = GetExecutorName() end
-        
-        UI.CreateLabel(ExecutorFrame, {
-            Text = "🔧 Executor: " .. ExecutorName,
-            TextSize = 13,
-            Position = UDim2.new(0, 10, 0, 10),
-            Size = UDim2.new(1, -20, 0, 25),
-        })
-        
-        -- Player Controls
-        local ControlsFrame = UI.CreateFrame(MainContainer, {
-            Size = UDim2.new(1, -20, 0, 140),
-            Position = UDim2.new(0, 10, 0, 230),
-            BackgroundColor3 = Config.Theme.Secondary,
-        })
-        
-        UI.CreateLabel(ControlsFrame, {
-            Text = "⚡ Player Controls",
-            TextSize = 13,
-            TextColor3 = Config.Theme.Accent,
-            Position = UDim2.new(0, 10, 0, 5),
-            Size = UDim2.new(1, -20, 0, 20),
-        })
-        
-        -- WalkSpeed Control
-        local WalkSpeedLabel = UI.CreateLabel(ControlsFrame, {
-            Text = "WalkSpeed: 16",
-            TextSize = 11,
-            Position = UDim2.new(0, 10, 0, 30),
-            Size = UDim2.new(0.3, 0, 0, 20),
-        })
-        
-        local WalkSpeedBox = UI.CreateTextBox(ControlsFrame, {
-            Size = UDim2.new(0.3, -15, 0, 25),
-            Position = UDim2.new(0.35, 5, 0, 30),
-            PlaceholderText = "Enter value",
-        })
-        
-        local WalkSpeedBtn = UI.CreateButton(ControlsFrame, {
-            Text = "Apply",
-            Size = UDim2.new(0.25, -5, 0, 25),
-            Position = UDim2.new(0.7, 5, 0, 30),
-            BackgroundColor3 = Config.Theme.Success,
-            Callback = function()
-                local Value = tonumber(WalkSpeedBox.Text)
-                if Value then
-                    LocalPlayer.Character.Humanoid.WalkSpeed = Value
-                    WalkSpeedLabel.Text = "WalkSpeed: " .. Value
-                    UI.Notify("WalkSpeed set to " .. Value, 1)
-                end
-            end
-        })
-        
-        -- JumpHeight Control
-        local JumpHeightLabel = UI.CreateLabel(ControlsFrame, {
-            Text = "JumpHeight: 50",
-            TextSize = 11,
-            Position = UDim2.new(0, 10, 0, 65),
-            Size = UDim2.new(0.3, 0, 0, 20),
-        })
-        
-        local JumpHeightBox = UI.CreateTextBox(ControlsFrame, {
-            Size = UDim2.new(0.3, -15, 0, 25),
-            Position = UDim2.new(0.35, 5, 0, 65),
-            PlaceholderText = "Enter value",
-        })
-        
-        local JumpHeightBtn = UI.CreateButton(ControlsFrame, {
-            Text = "Apply",
-            Size = UDim2.new(0.25, -5, 0, 25),
-            Position = UDim2.new(0.7, 5, 0, 65),
-            BackgroundColor3 = Config.Theme.Success,
-            Callback = function()
-                local Value = tonumber(JumpHeightBox.Text)
-                if Value then
-                    LocalPlayer.Character.Humanoid.JumpHeight = Value
-                    JumpHeightLabel.Text = "JumpHeight: " .. Value
-                    UI.Notify("JumpHeight set to " .. Value, 1)
-                end
-            end
-        })
-        
-        -- Noclip Toggle
-        local NoclipButton = UI.CreateButton(ControlsFrame, {
-            Text = "Noclip: OFF",
-            Size = UDim2.new(0.4, -5, 0, 25),
-            Position = UDim2.new(0, 10, 0, 100),
-            BackgroundColor3 = Config.Theme.Danger,
-            Callback = function()
-                -- Noclip implementation
-                NoclipButton.BackgroundColor3 = NoclipButton.BackgroundColor3 == Config.Theme.Danger and Config.Theme.Success or Config.Theme.Danger
-                local ButtonLabel = NoclipButton:FindFirstChildOfClass("TextLabel")
-                ButtonLabel.Text = NoclipButton.BackgroundColor3 == Config.Theme.Success and "Noclip: ON" or "Noclip: OFF"
-            end
-        })
-        
-        -- Respawn Button
-        local RespawnBtn = UI.CreateButton(ControlsFrame, {
-            Text = "Respawn",
-            Size = UDim2.new(0.4, -5, 0, 25),
-            Position = UDim2.new(0.55, 5, 0, 100),
-            BackgroundColor3 = Config.Theme.Warning,
-            Callback = function()
-                LocalPlayer.Character:FindFirstChild("Humanoid").Health = 0
-            end
-        })
+        ContentScroll.CanvasSize = UDim2.new(0, 0, 0, 130)
+        self.State.StatusLabel.Text = "No scripts available"
+        return
     end
-    
-    PopulateSidebar()
-    PopulateContent()
+
+    local TotalHeight = 0
+    for _, ScriptData in ipairs(Scripts) do
+        local Card = UI.CreateFrame(ContentScroll, {
+            Size = UDim2.new(1, -20, 0, 96),
+            BackgroundColor3 = Config.Theme.Secondary,
+            UseStroke = true,
+            ZIndex = 3,
+        })
+
+        UI.CreateLabel(Card, {
+            Text = ScriptData.Name,
+            TextSize = 16,
+            Position = UDim2.new(0, 14, 0, 14),
+            Size = UDim2.new(0.6, 0, 0, 24),
+            TextColor3 = Config.Theme.Light,
+        })
+
+        UI.CreateLabel(Card, {
+            Text = ScriptData.Category,
+            TextSize = 12,
+            Position = UDim2.new(0, 14, 0, 42),
+            Size = UDim2.new(0.4, 0, 0, 20),
+            TextColor3 = Config.Theme.Warning,
+        })
+
+        UI.CreateButton(Card, {
+            Text = "Execute",
+            Size = UDim2.new(0, 110, 0, 34),
+            Position = UDim2.new(0.62, 0, 0, 28),
+            BackgroundColor3 = Config.Theme.Success,
+            TextColor3 = Config.Theme.Dark,
+            Callback = function()
+                self:ExecuteScript(ScriptData)
+            end,
+        })
+
+        UI.CreateButton(Card, {
+            Text = "Copy",
+            Size = UDim2.new(0, 110, 0, 34),
+            Position = UDim2.new(0.78, 0, 0, 28),
+            BackgroundColor3 = Config.Theme.Accent,
+            Callback = function()
+                if setclipboard then
+                    setclipboard(ScriptData.Code)
+                    UI.Notify("Copied script", 1.8, "Success")
+                else
+                    UI.Notify("Clipboard unavailable", 1.8, "Warning")
+                end
+            end,
+        })
+
+        TotalHeight = TotalHeight + 108
+    end
+
+    ContentScroll.CanvasSize = UDim2.new(0, 0, 0, TotalHeight + 16)
+    self.State.StatusLabel.Text = "Loaded " .. tostring(#Scripts) .. " scripts"
+end
+
+function ScriptHub:RenderContent()
+    if Core.State.ActiveCategory == "player / stats" then
+        self:RenderStatsPage()
+    else
+        self:HydrateUI()
+    end
+end
+
+function ScriptHub:RenderStatsPage()
+    local ContentScroll = self.State.ContentScroll
+    local StatsCard = UI.CreateFrame(ContentScroll, {
+        Size = UDim2.new(1, -20, 0, 240),
+        BackgroundColor3 = Config.Theme.Secondary,
+        UseStroke = true,
+        ZIndex = 3,
+    })
+
+    UI.CreateLabel(StatsCard, {
+        Text = "Welcome back, " .. LocalPlayer.Name,
+        TextSize = 18,
+        Position = UDim2.new(0, 14, 0, 14),
+        Size = UDim2.new(1, -28, 0, 28),
+        TextColor3 = Config.Theme.Light,
+    })
+
+    UI.CreateLabel(StatsCard, {
+        Text = "Executor: " .. (GetExecutorName and GetExecutorName() or "Unknown"),
+        TextSize = 14,
+        Position = UDim2.new(0, 14, 0, 46),
+        Size = UDim2.new(1, -28, 0, 24),
+        TextColor3 = Config.Theme.Accent,
+    })
+
+    UI.CreateLabel(StatsCard, {
+        Text = "Players: " .. tostring(#Players:GetPlayers()),
+        TextSize = 14,
+        Position = UDim2.new(0, 14, 0, 70),
+        Size = UDim2.new(1, -28, 0, 24),
+    })
+
+    UI.CreateLabel(StatsCard, {
+        Text = "Categories: " .. tostring(#self:GetCategories()),
+        TextSize = 14,
+        Position = UDim2.new(0, 14, 0, 96),
+        Size = UDim2.new(1, -28, 0, 24),
+    })
+
+    self.State.StatusLabel.Text = "Stats page active"
+    self.State.ContentScroll.CanvasSize = UDim2.new(0, 0, 0, 260)
 end
 
 -- ============================================================================
--- EXECUTION
+-- KEY SYSTEM MODULE
 -- ============================================================================
 
-KeySystem.Show()
+local KeySystem = {}
+
+function KeySystem:Open()
+    Core.State.KeyAttempts = 0
+    if Core.State.ModalOpen then
+        return
+    end
+
+    Core.State.ModalOpen = true
+    Core:DisconnectAll()
+
+    local Overlay = UI.CreateOverlay(PlayerGui, 40)
+    local Panel = UI.CreateFrame(Overlay, {
+        Size = UDim2.new(0, 440, 0, 300),
+        Position = UDim2.new(0.5, -220, 0.5, -150),
+        BackgroundColor3 = Config.Theme.Secondary,
+        UseStroke = true,
+        ZIndex = 41,
+    })
+
+    UI.CreateLabel(Panel, {
+        Text = "🔒 KEY AUTH",
+        TextSize = 22,
+        TextColor3 = Config.Theme.Accent,
+        Position = UDim2.new(0, 24, 0, 24),
+        Size = UDim2.new(1, -48, 0, 28),
+        TextXAlignment = Enum.TextXAlignment.Left,
+    })
+
+    UI.CreateLabel(Panel, {
+        Text = "Enter the code to unlock the hub.",
+        TextSize = 14,
+        TextColor3 = Config.Theme.Light,
+        Position = UDim2.new(0, 24, 0, 58),
+        Size = UDim2.new(1, -48, 0, 22),
+        TextXAlignment = Enum.TextXAlignment.Left,
+    })
+
+    local KeyInput = UI.CreateTextBox(Panel, {
+        Size = UDim2.new(1, -48, 0, 46),
+        Position = UDim2.new(0, 24, 0, 100),
+        PlaceholderText = "Enter key...",
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ClearTextOnFocus = false,
+        ZIndex = 42,
+    })
+
+    local Unlock = UI.CreateButton(Panel, {
+        Text = "UNLOCK",
+        Size = UDim2.new(0, 160, 0, 44),
+        Position = UDim2.new(0.5, -80, 0, 164),
+        BackgroundColor3 = Config.Theme.Success,
+        TextColor3 = Config.Theme.Dark,
+        ZIndex = 42,
+    })
+
+    local Attempts = UI.CreateLabel(Panel, {
+        Text = "Attempts left: " .. tostring(Core.State.MaxKeyAttempts),
+        TextSize = 13,
+        TextColor3 = Config.Theme.Warning,
+        Position = UDim2.new(0, 24, 0, 228),
+        Size = UDim2.new(1, -48, 0, 20),
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 42,
+    })
+
+    local function UpdateAttempts()
+        Attempts.Text = "Attempts left: " .. tostring(math.max(0, Core.State.MaxKeyAttempts - Core.State.KeyAttempts))
+    end
+
+    local function CloseModal()
+        Core.State.ModalOpen = false
+        UI.SafeDestroy(Overlay)
+    end
+
+    local function Validate()
+        local Value = tostring(KeyInput.Text or ""):gsub("^%s*(.-)%s*$", "%1")
+        if Value == "" then
+            UI.Notify("Please enter the key", 1.5, "Warning")
+            return
+        end
+
+        if Value == Config.CorrectKey then
+            UI.Notify("Key accepted. Loading hub...", 1.8, "Success")
+            task.delay(0.18, function()
+                CloseModal()
+                ScriptHub:Open()
+            end)
+            return
+        end
+
+        Core.State.KeyAttempts = Core.State.KeyAttempts + 1
+        UpdateAttempts()
+        UI.Notify("Invalid key", 1.6, "Danger")
+        TweenService:Create(Panel, TweenInfo.new(0.12), {BackgroundColor3 = Config.Theme.Danger}):Play()
+        task.delay(0.14, function()
+            if Panel and Panel.Parent then
+                Panel.BackgroundColor3 = Config.Theme.Secondary
+            end
+        end)
+        KeyInput.Text = ""
+
+        if Core.State.KeyAttempts >= Core.State.MaxKeyAttempts then
+            task.delay(0.2, function()
+                UI.Notify("Max attempts reached", 2, "Danger")
+                task.wait(2)
+                LocalPlayer:Kick("Key system failed")
+            end)
+        end
+    end
+
+    Unlock.MouseButton1Click:Connect(Validate)
+    Core:BindConnection(KeyInput.FocusLost:Connect(function(EnterPressed)
+        if EnterPressed then
+            Validate()
+        end
+    end))
+
+    Core:BindConnection(UserInputService.InputBegan:Connect(function(Input, GameProcessed)
+        if GameProcessed or not Core.State.ModalOpen then
+            return
+        end
+        if Input.KeyCode == Enum.KeyCode.Return or Input.KeyCode == Enum.KeyCode.KeypadEnter then
+            Validate()
+        end
+    end))
+
+    KeyInput:CaptureFocus()
+end
+
+-- ============================================================================
+-- BOOTSTRAP
+-- ============================================================================
+
+Core.Modules.UI = UI
+Core.Modules.ScriptHub = ScriptHub
+Core.Modules.KeySystem = KeySystem
+
+ScriptHub:Open()
+KeySystem:Open()
