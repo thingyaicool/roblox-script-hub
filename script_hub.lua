@@ -13,9 +13,38 @@ local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+local function IsLegacyHubGui(Gui)
+    if not Gui:IsA("ScreenGui") then
+        return false
+    end
+
+    if Gui.Name == "ScriptHubGui" or Gui.Name == "KeySystemGui" then
+        return true
+    end
+
+    local function ContainsLegacyText(Object)
+        for _, Descendant in ipairs(Object:GetDescendants()) do
+            if Descendant:IsA("TextLabel") or Descendant:IsA("TextButton") or Descendant:IsA("TextBox") then
+                local ok, Text = pcall(function()
+                    return Descendant.Text
+                end)
+                if ok and type(Text) == "string" then
+                    local Up = string.upper(Text)
+                    if Up:find("KEY SYSTEM") or Up:find("KEY AUTH") or Up:find("SUBMIT") or Up:find("SCRIPT HUB") then
+                        return true
+                    end
+                end
+            end
+        end
+        return false
+    end
+
+    return ContainsLegacyText(Gui)
+end
+
 local function CleanupExistingHubs()
     for _, Gui in ipairs(PlayerGui:GetChildren()) do
-        if Gui.Name == "ScriptHubGui" or Gui.Name == "KeySystemGui" then
+        if IsLegacyHubGui(Gui) then
             pcall(function()
                 Gui:Destroy()
             end)
