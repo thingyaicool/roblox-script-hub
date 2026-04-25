@@ -1,6 +1,6 @@
 -- ============================================================================
--- ROBLOX SCRIPT HUB - Modern Sirius UI Edition
--- Built-in UI effects, gradients, and polished modern layout
+-- ROBLOX SCRIPT HUB - Sirius UI Library Edition
+-- Compact modern UI, real library-style API, all categories visible
 -- ============================================================================
 
 local Players = game:GetService("Players")
@@ -9,7 +9,7 @@ local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-local function clearOldHub()
+local function cleanupOldHub()
     for _, gui in ipairs(PlayerGui:GetChildren()) do
         if gui:IsA("ScreenGui") and gui.Name == "ScriptHubGui" then
             pcall(function()
@@ -18,73 +18,70 @@ local function clearOldHub()
         end
     end
 end
+cleanupOldHub()
 
-clearOldHub()
+local Sirius = {}
 
-local SiriusUI = {}
-
-function SiriusUI.Create(className, properties)
+function Sirius.new(className, props)
     local instance = Instance.new(className)
-    for property, value in pairs(properties or {}) do
+    for property, value in pairs(props or {}) do
         instance[property] = value
     end
     return instance
 end
 
-function SiriusUI.ApplyGradient(instance, colorA, colorB, rotation)
-    local gradient = SiriusUI.Create("UIGradient", {
-        Parent = instance,
+function Sirius.gradient(target, colorA, colorB, rotation)
+    local gradient = Sirius.new("UIGradient", {
+        Parent = target,
         Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0, colorA),
             ColorSequenceKeypoint.new(1, colorB),
         }),
-        Rotation = rotation or 0,
+        Rotation = rotation or 90,
     })
     return gradient
 end
 
-function SiriusUI.Tween(instance, properties, duration, easing, direction)
-    easing = easing or Enum.EasingStyle.Quad
-    direction = direction or Enum.EasingDirection.Out
-    local tweenInfo = TweenInfo.new(duration or 0.25, easing, direction)
-    return TweenService:Create(instance, tweenInfo, properties)
+function Sirius.tween(instance, props, duration)
+    local info = TweenInfo.new(duration or 0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    return TweenService:Create(instance, info, props)
 end
 
-function SiriusUI.Notify(message, duration)
+function Sirius.notify(text, duration)
     duration = duration or 2.5
-    local toast = SiriusUI.Create("Frame", {
+    local toast = Sirius.new("Frame", {
         Parent = PlayerGui,
         AnchorPoint = Vector2.new(0.5, 0),
         Position = UDim2.new(0.5, 0, 0.025, 0),
-        Size = UDim2.new(0, 380, 0, 56),
-        BackgroundColor3 = Color3.fromRGB(23, 26, 42),
+        Size = UDim2.new(0, 340, 0, 52),
+        BackgroundColor3 = Color3.fromRGB(18, 21, 34),
         BorderSizePixel = 0,
         BackgroundTransparency = 1,
         ZIndex = 999,
     })
-    SiriusUI.Create("UICorner", {Parent = toast, CornerRadius = UDim.new(0, 18)})
-    SiriusUI.Create("UIStroke", {Parent = toast, Color = Color3.fromRGB(97, 142, 255), Thickness = 1, Transparency = 0.7})
+    Sirius.new("UICorner", {Parent = toast, CornerRadius = UDim.new(0, 16)})
+    Sirius.new("UIStroke", {Parent = toast, Color = Color3.fromRGB(90, 130, 255), Thickness = 1, Transparency = 0.8})
 
-    local label = SiriusUI.Create("TextLabel", {
+    Sirius.new("TextLabel", {
         Parent = toast,
-        Size = UDim2.new(1, -32, 1, -20),
-        Position = UDim2.new(0, 16, 0, 10),
+        Size = UDim2.new(1, -28, 1, -16),
+        Position = UDim2.new(0, 14, 0, 8),
         BackgroundTransparency = 1,
-        Text = message,
+        Text = text,
         Font = Enum.Font.GothamBold,
         TextSize = 14,
-        TextColor3 = Color3.fromRGB(235, 240, 255),
-        TextWrapped = true,
+        TextColor3 = Color3.fromRGB(242, 246, 255),
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Center,
+        TextWrapped = true,
     })
 
-    toast.Position = UDim2.new(0.5, -toast.Size.X.Offset / 2, 0, 18)
-    SiriusUI.Tween(toast, {BackgroundTransparency = 0}, 0.2):Play()
+    toast.Position = UDim2.new(0.5, -170, 0, 18)
+    Sirius.tween(toast, {BackgroundTransparency = 0}, 0.18):Play()
     task.delay(duration, function()
         if toast and toast.Parent then
-            SiriusUI.Tween(toast, {BackgroundTransparency = 1}, 0.2):Play()
-            task.delay(0.25, function()
+            Sirius.tween(toast, {BackgroundTransparency = 1}, 0.18):Play()
+            task.delay(0.22, function()
                 if toast then
                     toast:Destroy()
                 end
@@ -93,240 +90,213 @@ function SiriusUI.Notify(message, duration)
     end)
 end
 
-function SiriusUI.CreateWindow(title)
-    local screenGui = SiriusUI.Create("ScreenGui", {
+function Sirius.createWindow(title)
+    local screenGui = Sirius.new("ScreenGui", {
         Parent = PlayerGui,
         Name = "ScriptHubGui",
         ResetOnSpawn = false,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     })
 
-    local mainFrame = SiriusUI.Create("Frame", {
+    local root = Sirius.new("Frame", {
         Parent = screenGui,
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0.5, 0.5, 0.5, 0),
-        Size = UDim2.new(0, 980, 0, 620),
-        BackgroundColor3 = Color3.fromRGB(15, 18, 28),
+        Size = UDim2.new(0, 760, 0, 520),
+        BackgroundColor3 = Color3.fromRGB(16, 18, 26),
         BorderSizePixel = 0,
         ClipsDescendants = true,
     })
-    SiriusUI.Create("UICorner", {Parent = mainFrame, CornerRadius = UDim.new(0, 24)})
-    SiriusUI.ApplyGradient(mainFrame, Color3.fromRGB(14, 17, 27), Color3.fromRGB(18, 22, 35), 90)
+    Sirius.new("UICorner", {Parent = root, CornerRadius = UDim.new(0, 24)})
+    Sirius.gradient(root, Color3.fromRGB(14, 17, 26), Color3.fromRGB(17, 20, 32), 90)
 
-    local accentBar = SiriusUI.Create("Frame", {
-        Parent = mainFrame,
+    Sirius.new("Frame", {
+        Parent = root,
         AnchorPoint = Vector2.new(0, 0),
         Position = UDim2.new(0, 0, 0, 0),
-        Size = UDim2.new(1, 0, 0, 8),
-        BackgroundColor3 = Color3.fromRGB(80, 130, 255),
+        Size = UDim2.new(1, 0, 0, 6),
+        BackgroundColor3 = Color3.fromRGB(84, 138, 255),
         BorderSizePixel = 0,
     })
-    SiriusUI.Create("UIGradient", {
-        Parent = accentBar,
-        Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(95, 165, 255)),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(125, 200, 255)),
-        }),
-        Rotation = 0,
-    })
 
-    local header = SiriusUI.Create("Frame", {
-        Parent = mainFrame,
+    local header = Sirius.new("Frame", {
+        Parent = root,
         Position = UDim2.new(0, 0, 0, 8),
-        Size = UDim2.new(1, 0, 0, 72),
+        Size = UDim2.new(1, 0, 0, 58),
         BackgroundTransparency = 1,
     })
 
-    SiriusUI.Create("TextLabel", {
+    Sirius.new("TextLabel", {
         Parent = header,
-        Position = UDim2.new(0.04, 0, 0.2, 0),
+        Position = UDim2.new(0.04, 0, 0.15, 0),
         Size = UDim2.new(0.5, 0, 0.7, 0),
         BackgroundTransparency = 1,
-        Text = "🔮 ROBLOX SCRIPT HUB",
+        Text = title,
         Font = Enum.Font.GothamBold,
-        TextSize = 24,
-        TextColor3 = Color3.fromRGB(240, 245, 255),
+        TextSize = 20,
+        TextColor3 = Color3.fromRGB(241, 245, 255),
         TextXAlignment = Enum.TextXAlignment.Left,
     })
 
-    SiriusUI.Create("TextLabel", {
+    Sirius.new("TextLabel", {
         Parent = header,
-        Position = UDim2.new(0.52, 0, 0.3, 0),
-        Size = UDim2.new(0.44, 0, 0.55, 0),
+        Position = UDim2.new(0.55, 0, 0.15, 0),
+        Size = UDim2.new(0.4, 0, 0.7, 0),
         BackgroundTransparency = 1,
-        Text = "Modern Sirius Edition",
+        Text = "Sirius UI Library",
         Font = Enum.Font.GothamMedium,
-        TextSize = 15,
-        TextColor3 = Color3.fromRGB(170, 180, 215),
+        TextSize = 13,
+        TextColor3 = Color3.fromRGB(168, 180, 209),
         TextXAlignment = Enum.TextXAlignment.Right,
     })
 
-    local body = SiriusUI.Create("Frame", {
-        Parent = mainFrame,
-        Position = UDim2.new(0, 0, 0, 80),
-        Size = UDim2.new(1, 0, 1, -80),
+    local body = Sirius.new("Frame", {
+        Parent = root,
+        Position = UDim2.new(0, 16, 0, 72),
+        Size = UDim2.new(1, -32, 1, -88),
         BackgroundTransparency = 1,
     })
 
-    local sidebar = SiriusUI.Create("Frame", {
+    local sidebar = Sirius.new("Frame", {
         Parent = body,
-        Position = UDim2.new(0, 20, 0, 0),
-        Size = UDim2.new(0, 260, 1, -20),
+        Position = UDim2.new(0, 0, 0, 0),
+        Size = UDim2.new(0, 220, 1, 0),
         BackgroundColor3 = Color3.fromRGB(18, 22, 34),
         BorderSizePixel = 0,
     })
-    SiriusUI.Create("UICorner", {Parent = sidebar, CornerRadius = UDim.new(0, 20)})
-    SiriusUI.Create("UIStroke", {Parent = sidebar, Color = Color3.fromRGB(62, 86, 160), Thickness = 1, Transparency = 0.75})
-    SiriusUI.ApplyGradient(sidebar, Color3.fromRGB(18, 22, 34), Color3.fromRGB(16, 20, 32), 90)
+    Sirius.new("UICorner", {Parent = sidebar, CornerRadius = UDim.new(0, 18)})
+    Sirius.new("UIStroke", {Parent = sidebar, Color = Color3.fromRGB(74, 106, 176), Thickness = 1, Transparency = 0.85})
+    Sirius.gradient(sidebar, Color3.fromRGB(18, 22, 34), Color3.fromRGB(16, 20, 30), 90)
 
-    local sidebarTitle = SiriusUI.Create("TextLabel", {
+    Sirius.new("TextLabel", {
         Parent = sidebar,
-        Position = UDim2.new(0, 0, 0, 18),
+        Position = UDim2.new(0, 0, 0, 14),
         Size = UDim2.new(1, 0, 0, 28),
         BackgroundTransparency = 1,
         Text = "CATEGORIES",
         Font = Enum.Font.GothamBold,
-        TextSize = 14,
-        TextColor3 = Color3.fromRGB(165, 180, 255),
+        TextSize = 13,
+        TextColor3 = Color3.fromRGB(191, 201, 238),
         TextXAlignment = Enum.TextXAlignment.Center,
     })
 
-    local categoryFrame = SiriusUI.Create("ScrollingFrame", {
+    local categoryPanel = Sirius.new("ScrollingFrame", {
         Parent = sidebar,
-        Position = UDim2.new(0, 0, 0, 56),
-        Size = UDim2.new(1, 0, 1, -66),
+        Position = UDim2.new(0, 0, 0, 50),
+        Size = UDim2.new(1, 0, 1, -52),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
-        ScrollBarThickness = 10,
+        ScrollBarThickness = 9,
         CanvasSize = UDim2.new(0, 0, 0, 0),
     })
-    local categoryLayout = SiriusUI.Create("UIListLayout", {Parent = categoryFrame, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 12)})
-    SiriusUI.Create("UIPadding", {Parent = categoryFrame, PaddingTop = UDim.new(0, 12), PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14)})
+    local categoryLayout = Sirius.new("UIListLayout", {Parent = categoryPanel, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 10)})
+    Sirius.new("UIPadding", {Parent = categoryPanel, PaddingTop = UDim.new(0, 12), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12)})
 
-    local mainArea = SiriusUI.Create("Frame", {
+    local contentArea = Sirius.new("Frame", {
         Parent = body,
-        Position = UDim2.new(0, 300, 0, 0),
-        Size = UDim2.new(1, -320, 1, -20),
-        BackgroundColor3 = Color3.fromRGB(18, 20, 30),
+        Position = UDim2.new(0, 232, 0, 0),
+        Size = UDim2.new(1, -232, 1, 0),
+        BackgroundColor3 = Color3.fromRGB(19, 22, 34),
         BorderSizePixel = 0,
     })
-    SiriusUI.Create("UICorner", {Parent = mainArea, CornerRadius = UDim.new(0, 20)})
-    SiriusUI.Create("UIStroke", {Parent = mainArea, Color = Color3.fromRGB(66, 90, 170), Thickness = 1, Transparency = 0.8})
-    SiriusUI.ApplyGradient(mainArea, Color3.fromRGB(16, 19, 29), Color3.fromRGB(20, 24, 35), 90)
+    Sirius.new("UICorner", {Parent = contentArea, CornerRadius = UDim.new(0, 18)})
+    Sirius.new("UIStroke", {Parent = contentArea, Color = Color3.fromRGB(76, 102, 182), Thickness = 1, Transparency = 0.85})
+    Sirius.gradient(contentArea, Color3.fromRGB(18, 22, 34), Color3.fromRGB(16, 20, 30), 90)
 
-    local searchBar = SiriusUI.Create("TextBox", {
-        Parent = mainArea,
-        Position = UDim2.new(0, 20, 0, 20),
-        Size = UDim2.new(0.55, 0, 0, 44),
-        BackgroundColor3 = Color3.fromRGB(17, 20, 30),
+    local searchBar = Sirius.new("TextBox", {
+        Parent = contentArea,
+        Position = UDim2.new(0, 18, 0, 18),
+        Size = UDim2.new(0.6, 0, 0, 38),
+        BackgroundColor3 = Color3.fromRGB(13, 17, 28),
         BorderSizePixel = 0,
         PlaceholderText = "Search scripts...",
         Text = "",
-        TextColor3 = Color3.fromRGB(230, 230, 245),
+        TextColor3 = Color3.fromRGB(235, 240, 255),
         TextSize = 14,
         Font = Enum.Font.Gotham,
         TextXAlignment = Enum.TextXAlignment.Left,
     })
-    SiriusUI.Create("UICorner", {Parent = searchBar, CornerRadius = UDim.new(0, 14)})
-    SiriusUI.Create("UIStroke", {Parent = searchBar, Color = Color3.fromRGB(80, 120, 220), Thickness = 1, Transparency = 0.9})
+    Sirius.new("UICorner", {Parent = searchBar, CornerRadius = UDim.new(0, 14)})
+    Sirius.new("UIStroke", {Parent = searchBar, Color = Color3.fromRGB(90, 130, 230), Thickness = 1, Transparency = 0.9})
 
-    local quickInfo = SiriusUI.Create("Frame", {
-        Parent = mainArea,
-        Position = UDim2.new(0.55, 20, 0, 20),
-        Size = UDim2.new(0.42, -40, 0, 44),
-        BackgroundColor3 = Color3.fromRGB(13, 16, 26),
+    local infoPill = Sirius.new("Frame", {
+        Parent = contentArea,
+        Position = UDim2.new(0.62, 20, 0, 18),
+        Size = UDim2.new(0.36, -38, 0, 38),
+        BackgroundColor3 = Color3.fromRGB(15, 18, 28),
         BorderSizePixel = 0,
     })
-    SiriusUI.Create("UICorner", {Parent = quickInfo, CornerRadius = UDim.new(0, 14)})
-    SiriusUI.ApplyGradient(quickInfo, Color3.fromRGB(20, 24, 38), Color3.fromRGB(16, 20, 30), 180)
+    Sirius.new("UICorner", {Parent = infoPill, CornerRadius = UDim.new(0, 14)})
+    Sirius.new("UIStroke", {Parent = infoPill, Color = Color3.fromRGB(96, 150, 255), Thickness = 1, Transparency = 0.9})
 
-    SiriusUI.Create("TextLabel", {
-        Parent = quickInfo,
-        Position = UDim2.new(0.03, 0, 0, 0),
-        Size = UDim2.new(0.8, 0, 1, 0),
+    Sirius.new("TextLabel", {
+        Parent = infoPill,
+        Size = UDim2.new(1, -18, 1, 0),
+        Position = UDim2.new(0, 12, 0, 0),
         BackgroundTransparency = 1,
-        Text = "Sirius style library with built-in filters",
+        Text = "Sirius style UI with all categories",
         Font = Enum.Font.GothamMedium,
-        TextSize = 13,
-        TextColor3 = Color3.fromRGB(190, 200, 235),
+        TextSize = 12,
+        TextColor3 = Color3.fromRGB(204, 214, 245),
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Center,
+        TextWrapped = true,
     })
 
-    local quickBadge = SiriusUI.Create("TextLabel", {
-        Parent = quickInfo,
-        Position = UDim2.new(0.8, 0, 0.12, 0),
-        Size = UDim2.new(0.18, 0, 0.76, 0),
-        BackgroundColor3 = Color3.fromRGB(67, 115, 255),
-        BorderSizePixel = 0,
-        Text = "LIVE",
-        Font = Enum.Font.GothamBold,
-        TextSize = 12,
-        TextColor3 = Color3.fromRGB(255, 255, 255),
-        TextXAlignment = Enum.TextXAlignment.Center,
-        TextYAlignment = Enum.TextYAlignment.Center,
-    })
-    SiriusUI.Create("UICorner", {Parent = quickBadge, CornerRadius = UDim.new(0, 12)})
-
-    local contentPane = SiriusUI.Create("Frame", {
-        Parent = mainArea,
-        Position = UDim2.new(0, 20, 0, 82),
-        Size = UDim2.new(1, -40, 1, -102),
-        BackgroundTransparency = 1,
-    })
-
-    local contentScroll = SiriusUI.Create("ScrollingFrame", {
-        Parent = contentPane,
-        Size = UDim2.new(1, 0, 1, 0),
-        Position = UDim2.new(0, 0, 0, 0),
+    local scriptContainer = Sirius.new("ScrollingFrame", {
+        Parent = contentArea,
+        Position = UDim2.new(0, 18, 0, 68),
+        Size = UDim2.new(1, -36, 1, -86),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         CanvasSize = UDim2.new(0, 0, 0, 0),
         ScrollBarThickness = 10,
     })
-    local contentLayout = SiriusUI.Create("UIListLayout", {Parent = contentScroll, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 18)})
-    SiriusUI.Create("UIPadding", {Parent = contentScroll, PaddingTop = UDim.new(0, 12), PaddingBottom = UDim.new(0, 12), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12)})
+    local scriptLayout = Sirius.new("UIListLayout", {Parent = scriptContainer, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 16)})
+    Sirius.new("UIPadding", {Parent = scriptContainer, PaddingTop = UDim.new(0, 12), PaddingBottom = UDim.new(0, 12), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12)})
 
     local window = {
-        ScreenGui = screenGui,
-        TabButtons = {},
-        Tabs = {},
-        ActiveTab = nil,
+        Gui = screenGui,
+        Root = root,
+        Categories = {},
+        CategoryButtons = {},
+        ActiveCategory = nil,
         SearchBox = searchBar,
-        CategoryFrame = categoryFrame,
-        ScriptCanvas = contentScroll,
-        ContentLayout = contentLayout,
+        ScriptContainer = scriptContainer,
+        ScriptLayout = scriptLayout,
+        CategoryFrame = categoryPanel,
+        CategoryLayout = categoryLayout,
     }
 
-    function window:AddTab(name)
-        local button = SiriusUI.Create("TextButton", {
-            Parent = categoryFrame,
-            Size = UDim2.new(1, 0, 0, 46),
-            BackgroundColor3 = Color3.fromRGB(18, 22, 35),
+    function window:AddCategory(name)
+        local button = Sirius.new("TextButton", {
+            Parent = categoryPanel,
+            Size = UDim2.new(1, 0, 0, 42),
+            BackgroundColor3 = Color3.fromRGB(18, 22, 34),
             BorderSizePixel = 0,
             Text = name,
             Font = Enum.Font.GothamBold,
-            TextSize = 14,
-            TextColor3 = Color3.fromRGB(210, 220, 255),
+            TextSize = 13,
+            TextColor3 = Color3.fromRGB(195, 205, 235),
             AutoButtonColor = false,
         })
-        SiriusUI.Create("UICorner", {Parent = button, CornerRadius = UDim.new(0, 14)})
-        SiriusUI.Create("UIStroke", {Parent = button, Color = Color3.fromRGB(70, 110, 225), Thickness = 1, Transparency = 0.8})
+        Sirius.new("UICorner", {Parent = button, CornerRadius = UDim.new(0, 14)})
+        Sirius.new("UIStroke", {Parent = button, Color = Color3.fromRGB(82, 122, 215), Thickness = 1, Transparency = 0.8})
 
-        local tabPage = {
+        local category = {
             Name = name,
             Button = button,
             Scripts = {},
         }
 
         function button:Activate()
-            for _, tab in ipairs(window.Tabs) do
-                tab.Button.BackgroundColor3 = Color3.fromRGB(18, 22, 35)
-                tab.Button.TextColor3 = Color3.fromRGB(210, 220, 255)
+            for _, tab in ipairs(window.Categories) do
+                tab.Button.BackgroundColor3 = Color3.fromRGB(18, 22, 34)
+                tab.Button.TextColor3 = Color3.fromRGB(195, 205, 235)
             end
-            button.BackgroundColor3 = Color3.fromRGB(70, 120, 235)
+            button.BackgroundColor3 = Color3.fromRGB(70, 120, 245)
             button.TextColor3 = Color3.fromRGB(255, 255, 255)
-            window.ActiveTab = tabPage
+            window.ActiveCategory = category
             window:RefreshScripts()
         end
 
@@ -334,39 +304,39 @@ function SiriusUI.CreateWindow(title)
             button:Activate()
         end)
 
-        table.insert(window.Tabs, tabPage)
-        window.CategoryFrame.CanvasSize = UDim2.new(0, 0, 0, categoryLayout.AbsoluteContentSize.Y + 16)
-        return tabPage
+        table.insert(window.Categories, category)
+        categoryPanel.CanvasSize = UDim2.new(0, 0, 0, categoryLayout.AbsoluteContentSize.Y + 16)
+        return category
     end
 
-    function window:CreateCard(title, description, buttonText, callback, accent)
-        local card = SiriusUI.Create("Frame", {
-            Parent = self.ScriptCanvas,
-            Size = UDim2.new(1, 0, 0, 140),
-            BackgroundColor3 = Color3.fromRGB(15, 18, 28),
+    function window:CreateScriptCard(script)
+        local card = Sirius.new("Frame", {
+            Parent = self.ScriptContainer,
+            Size = UDim2.new(1, 0, 0, 124),
+            BackgroundColor3 = Color3.fromRGB(17, 20, 32),
             BorderSizePixel = 0,
         })
-        SiriusUI.Create("UICorner", {Parent = card, CornerRadius = UDim.new(0, 18)})
-        SiriusUI.Create("UIStroke", {Parent = card, Color = Color3.fromRGB(75, 105, 230), Thickness = 1, Transparency = 0.8})
+        Sirius.new("UICorner", {Parent = card, CornerRadius = UDim.new(0, 16)})
+        Sirius.new("UIStroke", {Parent = card, Color = Color3.fromRGB(82, 118, 226), Thickness = 1, Transparency = 0.8})
 
-        SiriusUI.Create("TextLabel", {
+        Sirius.new("TextLabel", {
             Parent = card,
-            Position = UDim2.new(0, 18, 0, 14),
-            Size = UDim2.new(1, -36, 0, 28),
+            Position = UDim2.new(0, 16, 0, 14),
+            Size = UDim2.new(1, -32, 0, 24),
             BackgroundTransparency = 1,
-            Text = title,
+            Text = script.Name,
             Font = Enum.Font.GothamBold,
             TextSize = 16,
             TextColor3 = Color3.fromRGB(242, 248, 255),
             TextXAlignment = Enum.TextXAlignment.Left,
         })
 
-        SiriusUI.Create("TextLabel", {
+        Sirius.new("TextLabel", {
             Parent = card,
-            Position = UDim2.new(0, 18, 0, 40),
-            Size = UDim2.new(1, -36, 0, 58),
+            Position = UDim2.new(0, 16, 0, 38),
+            Size = UDim2.new(1, -170, 0, 58),
             BackgroundTransparency = 1,
-            Text = description,
+            Text = script.Description,
             Font = Enum.Font.Gotham,
             TextSize = 13,
             TextColor3 = Color3.fromRGB(176, 188, 215),
@@ -375,25 +345,24 @@ function SiriusUI.CreateWindow(title)
             TextWrapped = true,
         })
 
-        local runButton = SiriusUI.Create("TextButton", {
+        local runButton = Sirius.new("TextButton", {
             Parent = card,
-            Position = UDim2.new(1, -150, 1, -52),
-            Size = UDim2.new(0, 130, 0, 42),
-            BackgroundColor3 = accent or Color3.fromRGB(83, 132, 255),
+            Size = UDim2.new(0, 122, 0, 38),
+            Position = UDim2.new(1, -138, 1, -52),
+            BackgroundColor3 = script.Accent or Color3.fromRGB(85, 130, 255),
             BorderSizePixel = 0,
-            Text = buttonText,
+            Text = script.ButtonText,
             Font = Enum.Font.GothamBold,
-            TextSize = 14,
-            TextColor3 = Color3.fromRGB(20, 24, 36),
+            TextSize = 13,
+            TextColor3 = Color3.fromRGB(18, 20, 28),
             AutoButtonColor = false,
         })
-        SiriusUI.Create("UICorner", {Parent = runButton, CornerRadius = UDim.new(0, 14)})
-        SiriusUI.Create("UIStroke", {Parent = runButton, Color = Color3.fromRGB(255, 255, 255), Thickness = 1, Transparency = 0.7})
+        Sirius.new("UICorner", {Parent = runButton, CornerRadius = UDim.new(0, 12)})
 
         runButton.MouseButton1Click:Connect(function()
-            local success, err = pcall(callback)
-            if not success then
-                SiriusUI.Notify("Execution failed: " .. tostring(err), 3)
+            local ok, err = pcall(script.Callback)
+            if not ok then
+                Sirius.notify("Error: " .. tostring(err), 3)
             end
         end)
 
@@ -401,47 +370,47 @@ function SiriusUI.CreateWindow(title)
     end
 
     function window:RefreshScripts()
-        if not self.ActiveTab then
+        if not self.ActiveCategory then
             return
         end
 
-        for _, child in ipairs(self.ScriptCanvas:GetChildren()) do
+        for _, child in ipairs(self.ScriptContainer:GetChildren()) do
             if child:IsA("Frame") then
                 child:Destroy()
             end
         end
 
         local query = string.lower(self.SearchBox.Text or "")
-        local count = 0
-        for _, scriptData in ipairs(self.ActiveTab.Scripts) do
-            local nameLower = string.lower(scriptData.Name or "")
-            local categoryLower = string.lower(scriptData.Category or "")
-            local descLower = string.lower(scriptData.Description or "")
+        local found = 0
+
+        for _, script in ipairs(self.ActiveCategory.Scripts) do
+            local nameLower = string.lower(script.Name or "")
+            local categoryLower = string.lower(script.Category or "")
+            local descLower = string.lower(script.Description or "")
             if query == "" or string.find(nameLower, query, 1, true) or string.find(categoryLower, query, 1, true) or string.find(descLower, query, 1, true) then
-                self:CreateCard(scriptData.Name, scriptData.Description, scriptData.ButtonText, scriptData.Callback, scriptData.Accent)
-                count = count + 1
+                self:CreateScriptCard(script)
+                found = found + 1
             end
         end
 
-        self.ScriptCanvas.CanvasSize = UDim2.new(0, 0, 0, self.ContentLayout.AbsoluteContentSize.Y + 24)
-
-        if count == 0 then
-            local empty = SiriusUI.Create("TextLabel", {
-                Parent = self.ScriptCanvas,
+        if found == 0 then
+            Sirius.new("TextLabel", {
+                Parent = self.ScriptContainer,
                 Size = UDim2.new(1, 0, 0, 100),
                 BackgroundTransparency = 1,
-                Text = "No scripts match your search.",
+                Text = "No scripts match this search.",
                 Font = Enum.Font.GothamMedium,
-                TextSize = 16,
-                TextColor3 = Color3.fromRGB(172, 180, 205),
+                TextSize = 15,
+                TextColor3 = Color3.fromRGB(170, 180, 200),
                 TextXAlignment = Enum.TextXAlignment.Center,
                 TextYAlignment = Enum.TextYAlignment.Center,
             })
-            self.ScriptCanvas.CanvasSize = UDim2.new(0, 0, 0, 120)
         end
+
+        self.ScriptContainer.CanvasSize = UDim2.new(0, 0, 0, self.ScriptLayout.AbsoluteContentSize.Y + 18)
     end
 
-    searchBar:GetPropertyChangedSignal("Text"):Connect(function()
+    self.SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
         window:RefreshScripts()
     end)
 
@@ -453,8 +422,23 @@ local function loadSource(code)
     return loader(code)
 end
 
-local Window = SiriusUI.CreateWindow("🔮 ROBLOX SCRIPT HUB")
+local function makeScriptAction(entry)
+    return function()
+        local fn = loadSource(entry.Code)
+        if fn then
+            local ok, err = pcall(fn)
+            if not ok then
+                Sirius.notify("Execution failed: " .. tostring(err), 3)
+            else
+                Sirius.notify("Executed: " .. entry.Name, 2.5)
+            end
+        else
+            Sirius.notify("Invalid script code.", 3)
+        end
+    end
+end
 
+local Window = Sirius.createWindow("🔮 ROBLOX SCRIPT HUB")
 local ScriptLibrary = {
     {Name = "Infinite Jump", Category = "player / stats", Description = "Unlimited high jumps with smooth control.", ButtonText = "Run", Accent = Color3.fromRGB(120, 225, 255), Code = [[
 local Players = game:GetService("Players")
@@ -784,33 +768,21 @@ track:Play()
 ]]},
 }
 
-local categoryTabs = {}
+local categoryCache = {}
 for _, entry in ipairs(ScriptLibrary) do
-    if not categoryTabs[entry.Category] then
-        categoryTabs[entry.Category] = Window:AddTab(entry.Category)
+    if not categoryCache[entry.Category] then
+        categoryCache[entry.Category] = Window:AddCategory(entry.Category)
     end
-    table.insert(categoryTabs[entry.Category].Scripts, {
+    table.insert(categoryCache[entry.Category].Scripts, {
         Name = entry.Name,
         Category = entry.Category,
         Description = entry.Description,
         ButtonText = entry.ButtonText,
         Accent = entry.Accent,
-        Callback = function()
-            local func = loadSource(entry.Code)
-            if func then
-                local ok, err = pcall(func)
-                if not ok then
-                    SiriusUI.Notify("Script failed: " .. tostring(err), 3)
-                else
-                    SiriusUI.Notify("Executed: " .. entry.Name, 2.5)
-                end
-            else
-                SiriusUI.Notify("Unable to parse script.", 2.5)
-            end
-        end,
+        Callback = makeScriptAction(entry),
     })
 end
 
-if #Window.Tabs > 0 then
-    Window.Tabs[1].Button:Activate()
+if #Window.Categories > 0 then
+    Window.Categories[1].Button:Activate()
 end
