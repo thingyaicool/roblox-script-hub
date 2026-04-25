@@ -13,6 +13,18 @@ local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+local function CleanupExistingHubs()
+    for _, Gui in ipairs(PlayerGui:GetChildren()) do
+        if Gui.Name == "ScriptHubGui" or Gui.Name == "KeySystemGui" then
+            pcall(function()
+                Gui:Destroy()
+            end)
+        end
+    end
+end
+
+CleanupExistingHubs()
+
 -- ============================================================================
 -- CORE + CONFIG
 -- ============================================================================
