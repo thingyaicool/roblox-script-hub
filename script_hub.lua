@@ -102,7 +102,7 @@ function Sirius.createWindow(title)
         Parent = screenGui,
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0.5, 0.5, 0.5, 0),
-        Size = UDim2.new(0, 760, 0, 520),
+        Size = UDim2.new(0, 900, 0, 600),
         BackgroundColor3 = Color3.fromRGB(16, 18, 26),
         BorderSizePixel = 0,
         ClipsDescendants = true,
@@ -160,7 +160,7 @@ function Sirius.createWindow(title)
     local sidebar = Sirius.new("Frame", {
         Parent = body,
         Position = UDim2.new(0, 0, 0, 0),
-        Size = UDim2.new(0, 220, 1, 0),
+        Size = UDim2.new(0, 240, 1, 0),
         BackgroundColor3 = Color3.fromRGB(18, 22, 34),
         BorderSizePixel = 0,
     })
@@ -186,16 +186,23 @@ function Sirius.createWindow(title)
         Size = UDim2.new(1, 0, 1, -52),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
-        ScrollBarThickness = 9,
+        ScrollBarThickness = 10,
         CanvasSize = UDim2.new(0, 0, 0, 0),
+        ScrollingDirection = Enum.ScrollingDirection.Y,
     })
-    local categoryLayout = Sirius.new("UIListLayout", {Parent = categoryPanel, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 10)})
-    Sirius.new("UIPadding", {Parent = categoryPanel, PaddingTop = UDim.new(0, 12), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12)})
+    local categoryLayout = Sirius.new("UIListLayout", {
+        Parent = categoryPanel,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 12),
+        FillDirection = Enum.FillDirection.Vertical,
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+    })
+    Sirius.new("UIPadding", {Parent = categoryPanel, PaddingTop = UDim.new(0, 14), PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 16), PaddingBottom = UDim.new(0, 14)})
 
     local contentArea = Sirius.new("Frame", {
         Parent = body,
-        Position = UDim2.new(0, 232, 0, 0),
-        Size = UDim2.new(1, -232, 1, 0),
+        Position = UDim2.new(0, 256, 0, 0),
+        Size = UDim2.new(1, -256, 1, 0),
         BackgroundColor3 = Color3.fromRGB(19, 22, 34),
         BorderSizePixel = 0,
     })
@@ -271,7 +278,7 @@ function Sirius.createWindow(title)
     function window:AddCategory(name)
         local button = Sirius.new("TextButton", {
             Parent = categoryPanel,
-            Size = UDim2.new(1, 0, 0, 42),
+            Size = UDim2.new(1, -8, 0, 46),
             BackgroundColor3 = Color3.fromRGB(18, 22, 34),
             BorderSizePixel = 0,
             Text = name,
@@ -279,6 +286,7 @@ function Sirius.createWindow(title)
             TextSize = 13,
             TextColor3 = Color3.fromRGB(195, 205, 235),
             AutoButtonColor = false,
+            TextScaled = false,
         })
         Sirius.new("UICorner", {Parent = button, CornerRadius = UDim.new(0, 14)})
         Sirius.new("UIStroke", {Parent = button, Color = Color3.fromRGB(82, 122, 215), Thickness = 1, Transparency = 0.8})
@@ -305,8 +313,16 @@ function Sirius.createWindow(title)
         end)
 
         table.insert(window.Categories, category)
-        categoryPanel.CanvasSize = UDim2.new(0, 0, 0, categoryLayout.AbsoluteContentSize.Y + 16)
         return category
+    end
+    
+    function window:UpdateCategoryLayout()
+        task.wait(0.1)
+        local buttonHeight = 46
+        local padding = 12
+        local topBottomPadding = 28
+        local totalHeight = (#self.Categories * (buttonHeight + padding)) + topBottomPadding
+        categoryPanel.CanvasSize = UDim2.new(0, 0, 0, totalHeight)
     end
 
     function window:CreateScriptCard(script)
@@ -782,6 +798,10 @@ for _, entry in ipairs(ScriptLibrary) do
         Callback = makeScriptAction(entry),
     })
 end
+
+task.spawn(function()
+    Window:UpdateCategoryLayout()
+end)
 
 if #Window.Categories > 0 then
     Window.Categories[1].Button:Activate()
